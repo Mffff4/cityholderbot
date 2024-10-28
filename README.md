@@ -34,7 +34,7 @@ City Holder Bot — это автоматизированный бот для и
 ### Быстрый старт
 1. **Скачайте проект:**
    ```bash
-   git clone https://github.com/Mffff4/cityholder.git
+   git clone https://github.com/Mffff4/cityholderbot.git
    cd cityholder
    ```
 
@@ -124,7 +124,7 @@ City Holder Bot — это автоматизированный бот для и
 
 4. **Скачайте и запустите проект:**
    ```bash
-   git clone https://github.com/Mffff4/cityholder.git
+   git clone https://github.com/Mffff4/cityholderbot.git
    cd cityholder
    docker compose up -d
    ```
