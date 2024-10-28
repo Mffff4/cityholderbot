@@ -34,7 +34,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 ### Quick Start
 1. **Download the project:**
    ```bash
-   git clone https://github.com/Mffff4/cityholder.git
+   git clone https://github.com/Mffff4/cityholderbot.git
    cd cityholder
    ```
 
