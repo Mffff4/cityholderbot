@@ -90,6 +90,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 |---------|---------------|-------------|
 | API_ID | | Unique application identifier for Telegram API |
 | API_HASH | | Application hash for Telegram API |
+| REF_ID |  | Referral ID for invitations |
 | SLEEP_TIME | [1900, 2000] | Sleep time range between cycles (in seconds) |
 | USE_PROXY_FROM_FILE | False | Use proxy from file |
 | FULL_LOG_INFO | False | Enable full logging |
