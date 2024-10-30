@@ -44,8 +44,7 @@ def setup_webdriver():
 
     try:
         from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.utils import ChromeType
-
+        
         chrome_version = get_chrome_version()
         if chrome_version:
             logger.info(f"Обнаружена версия Chrome: {chrome_version}")
@@ -53,10 +52,10 @@ def setup_webdriver():
         pathlib.Path("webdriver").mkdir(parents=True, exist_ok=True)
         
         if platform.system() == 'Windows':
-            driver_path = ChromeDriverManager(version="latest").install()
+            driver_path = ChromeDriverManager().install()
         else:
-            chrome_type = ChromeType.CHROMIUM if platform.system() == 'Linux' else ChromeType.GOOGLE
-            driver_path = ChromeDriverManager(chrome_type=chrome_type, version="latest").install()
+            # Для Linux и macOS
+            driver_path = ChromeDriverManager().install()
             
         # Копируем драйвер в папку webdriver
         target_path = f"webdriver/{os.path.basename(driver_path)}"
