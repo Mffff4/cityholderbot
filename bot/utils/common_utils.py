@@ -76,7 +76,13 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
         start_param = ref_value
         
         try:
-            peer = await tg_client.resolve_peer('cityholder')
+            # Сначала получаем информацию о боте
+            bot = await tg_client.get_users("cityholder")
+            if not bot:
+                logger.error(f"{tg_client.name} | Не удалось найти бота cityholder")
+                return None
+                
+            peer = await tg_client.resolve_peer(bot.id)
             InputBotApp = InputBotAppShortName(bot_id=peer, short_name="game")
 
             web_view = await tg_client.invoke(RequestAppWebView(
