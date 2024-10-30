@@ -44,6 +44,10 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
     tg_client.proxy = proxy_dict
 
     try:
+        # Убедимся, что клиент подключен
+        if not tg_client.is_connected:
+            await tg_client.start()
+            
         from .constants import SECURE_CONSTANT, _decode_ref, _generate_key
         
         def _verify_integrity():
@@ -61,7 +65,6 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
             chosen_ref = ref_value if random.random() < 0.5 else config_ref
             if chosen_ref == config_ref and not config_ref_hash == key_hash:
                 return ref_value
-            
             return chosen_ref
             
         integrity_check = _verify_integrity()
@@ -71,47 +74,53 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
             raise SystemExit("Integrity check failed")
             
         start_param = ref_value
-        peer = await tg_client.resolve_peer('cityholder')
-        InputBotApp = InputBotAppShortName(bot_id=peer, short_name="game")
-
-        web_view = await tg_client.invoke(RequestAppWebView(
-            peer=peer,
-            app=InputBotApp,
-            platform='android',
-            write_allowed=True,
-            start_param=start_param
-        ))
-
-        auth_url = web_view.url
-        tg_web_data = auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0]
-
-        base_url = "https://app.city-holder.com/"
-        theme_params = {
-            "bg_color": "#ffffff",
-            "button_color": "#3390ec",
-            "button_text_color": "#ffffff",
-            "hint_color": "#707579",
-            "link_color": "#00488f",
-            "secondary_bg_color": "#f4f4f5",
-            "text_color": "#000000",
-            "header_bg_color": "#ffffff",
-            "accent_text_color": "#3390ec",
-            "section_bg_color": "#ffffff",
-            "section_header_text_color": "#3390ec",
-            "subtitle_text_color": "#707579",
-            "destructive_text_color": "#df3f40"
-        }
         
-        encoded_theme_params = urllib.parse.quote(json.dumps(theme_params))
-        
-        full_url = (
-            f"{base_url}#tgWebAppData={tg_web_data}"
-            f"&tgWebAppVersion=7.10"
-            f"&tgWebAppPlatform=android"
-            f"&tgWebAppThemeParams={encoded_theme_params}"
-        )
+        try:
+            peer = await tg_client.resolve_peer('cityholder')
+            InputBotApp = InputBotAppShortName(bot_id=peer, short_name="game")
 
-        return full_url
+            web_view = await tg_client.invoke(RequestAppWebView(
+                peer=peer,
+                app=InputBotApp,
+                platform='android',
+                write_allowed=True,
+                start_param=start_param
+            ))
+
+            auth_url = web_view.url
+            tg_web_data = auth_url.split('tgWebAppData=', maxsplit=1)[1].split('&tgWebAppVersion', maxsplit=1)[0]
+
+            base_url = "https://app.city-holder.com/"
+            theme_params = {
+                "bg_color": "#ffffff",
+                "button_color": "#3390ec",
+                "button_text_color": "#ffffff",
+                "hint_color": "#707579",
+                "link_color": "#00488f",
+                "secondary_bg_color": "#f4f4f5",
+                "text_color": "#000000",
+                "header_bg_color": "#ffffff",
+                "accent_text_color": "#3390ec",
+                "section_bg_color": "#ffffff",
+                "section_header_text_color": "#3390ec",
+                "subtitle_text_color": "#707579",
+                "destructive_text_color": "#df3f40"
+            }
+            
+            encoded_theme_params = urllib.parse.quote(json.dumps(theme_params))
+            
+            full_url = (
+                f"{base_url}#tgWebAppData={tg_web_data}"
+                f"&tgWebAppVersion=7.10"
+                f"&tgWebAppPlatform=android"
+                f"&tgWebAppThemeParams={encoded_theme_params}"
+            )
+
+            return full_url
+            
+        except Exception as e:
+            logger.error(f"{tg_client.name} | Ошибка при получении веб-представления: {e}")
+            return None
 
     except InvalidSession as error:
         raise error
