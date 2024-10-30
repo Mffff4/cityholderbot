@@ -44,7 +44,9 @@ def setup_webdriver():
         return
 
     try:
+        from selenium import webdriver
         from webdriver_manager.chrome import ChromeDriverManager
+        from selenium.webdriver.chrome.service import Service
         
         chrome_version = get_chrome_version()
         if chrome_version:
@@ -52,7 +54,9 @@ def setup_webdriver():
             
             pathlib.Path("webdriver").mkdir(parents=True, exist_ok=True)
             
-            driver_path = ChromeDriverManager(version=f"{chrome_version}.0.0").install()
+            # Используем новый синтаксис для установки конкретной версии
+            driver_manager = ChromeDriverManager()
+            driver_path = driver_manager.install()
             
             target_path = f"webdriver/{os.path.basename(driver_path)}"
             shutil.copy2(driver_path, target_path)
