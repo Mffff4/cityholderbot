@@ -1,9 +1,9 @@
 import os
 import pathlib
-import shutil
 import platform
 import subprocess
 from typing import Optional
+import undetected_chromedriver as uc
 
 from bot.config import config
 from bot.logger.logger import logger
@@ -44,30 +44,21 @@ def setup_webdriver():
         return
 
     try:
-        from selenium import webdriver
-        from webdriver_manager.chrome import ChromeDriverManager
-        from selenium.webdriver.chrome.service import Service
-        
         chrome_version = get_chrome_version()
         if chrome_version:
             logger.info(f"Обнаружена версия Chrome: {chrome_version}")
+            options = uc.ChromeOptions()
+            options.add_argument("--headless=new")
+            temp_driver = uc.Chrome(
+                options=options,
+                version_main=int(chrome_version),
+                driver_executable_path=None
+            )
+            temp_driver.quit()
             
-            pathlib.Path("webdriver").mkdir(parents=True, exist_ok=True)
-            
-            # Используем новый синтаксис для установки конкретной версии
-            driver_manager = ChromeDriverManager()
-            driver_path = driver_manager.install()
-            
-            target_path = f"webdriver/{os.path.basename(driver_path)}"
-            shutil.copy2(driver_path, target_path)
-            os.chmod(target_path, 0o755) 
-            logger.info(f"WebDriver успешно установлен: {target_path}")
+            logger.info(f"WebDriver успешно установлен для Chrome версии {chrome_version}")
         else:
-            logger.warning("Не удалось определить версию Chrome, попытка установки последней версии драйвера")
-            driver_path = ChromeDriverManager().install()
-            target_path = f"webdriver/{os.path.basename(driver_path)}"
-            shutil.copy2(driver_path, target_path)
-            os.chmod(target_path, 0o755)
+            logger.warning("Не удалось определить версию Chrome")
             
     except Exception as e:
         logger.error(f"Ошибка при установке WebDriver: {e}")
