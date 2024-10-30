@@ -1,7 +1,11 @@
 # City Holder Bot 🏠
 
+> ⚠️ **Important Warning**: 
+> This bot uses Selenium for automation, which can be an unstable solution. Future updates are not guaranteed. Use at your own risk.
+
 [![Bot Link](https://img.shields.io/badge/Telegram-Bot_Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/cityholder/game?startapp=228618799)
 [![Channel Link](https://img.shields.io/badge/Telegram-Channel_Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+0C-gh0mKBzxiNzky)
+[![Bot Collection](https://img.shields.io/badge/Bot_Collection-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+uF4lQD9ZEUE4NGUy)
 
 ---
 
