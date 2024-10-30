@@ -56,7 +56,6 @@ class Bot:
     async def run(self, proxy) -> None:
         try:
             proxy_conn = ProxyConnector().from_url(proxy) if proxy else None
-
             http_client = CloudflareScraper(connector=proxy_conn)
 
             if proxy:
@@ -68,7 +67,6 @@ class Bot:
             )
             while True:
                 logger.debug(f"URL адрес {self.session_name} | {self.tg_web_data}")
-                #await self.CONFIRM_TASK_EXPERIMENTAL()
 
                 async with self.lock:
                     play_in_browser(self.session_name, self.tg_web_data, proxy)
@@ -81,8 +79,9 @@ class Bot:
 
 async def start(tg_client: Client, proxy: str | None, lock: asyncio.Lock) -> None:
     try:
-        async with tg_client:
-            auth_url = await getTgWebAppData(tg_client, proxy)
+        await tg_client.start()
+        
+        auth_url = await getTgWebAppData(tg_client, proxy)
         
         if not auth_url:
             return None
@@ -100,6 +99,12 @@ async def start(tg_client: Client, proxy: str | None, lock: asyncio.Lock) -> Non
     except Exception as error:
         logger.error(f"{tg_client.name} | Неизвестная ошибка: {error}")
         logger.error(f"{tg_client.name} | Traceback: {traceback.format_exc()}")
+    finally:
+        try:
+            if tg_client.is_connected:
+                await tg_client.stop()
+        except Exception as e:
+            logger.error(f"{tg_client.name} | Ошибка при закрытии клиента: {e}")
 
 async def run_cycle(tg_clients, proxies, lock):
     tasks = []

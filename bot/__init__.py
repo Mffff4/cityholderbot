@@ -2,6 +2,7 @@ import os
 import pathlib
 import platform
 import subprocess
+import re
 from typing import Optional
 import undetected_chromedriver as uc
 
@@ -19,19 +20,22 @@ def get_chrome_version() -> Optional[str]:
             import winreg
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon")
             version, _ = winreg.QueryValueEx(key, "version")
-            return version.split('.')[0]
+            match = re.search(r'(\d+)\.', version)
+            return match.group(1) if match else None
         elif system == "Linux":
             for browser in ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']:
                 try:
                     output = subprocess.check_output([browser, '--version']).decode()
-                    version = output.split()[1].split('.')[0] 
-                    return version
+                    match = re.search(r'(\d+)\.', output)
+                    if match:
+                        return match.group(1)
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
         elif system == "Darwin": 
             try:
                 output = subprocess.check_output(['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '--version'])
-                return output.decode().split()[2].split('.')[0]
+                match = re.search(r'(\d+)\.', output.decode())
+                return match.group(1) if match else None
             except (subprocess.CalledProcessError, FileNotFoundError):
                 pass
     except Exception as e:
@@ -45,7 +49,7 @@ def setup_webdriver():
 
     try:
         chrome_version = get_chrome_version()
-        if chrome_version:
+        if chrome_version and chrome_version.isdigit():
             logger.info(f"Обнаружена версия Chrome: {chrome_version}")
             options = uc.ChromeOptions()
             options.add_argument("--headless=new")
@@ -58,7 +62,7 @@ def setup_webdriver():
             
             logger.info(f"WebDriver успешно установлен для Chrome версии {chrome_version}")
         else:
-            logger.warning("Не удалось определить версию Chrome")
+            logger.warning(f"Не удалось определить корректную версию Chrome: {chrome_version}")
             
     except Exception as e:
         logger.error(f"Ошибка при установке WebDriver: {e}")
