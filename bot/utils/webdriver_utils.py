@@ -239,6 +239,17 @@ class BrowserManager:
             await self.page.wait_for_selector('body', timeout=30000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
 
+            try:
+                understand_button = await self.page.wait_for_selector(
+                    "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Понял!')", 
+                    timeout=5000
+                )
+                if understand_button:
+                    await understand_button.evaluate("button => button.click()")
+                    await asyncio.sleep(1)
+            except Exception:
+                pass  
+
             city_button_selector = f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]"
             city_button = await self.page.wait_for_selector(city_button_selector, state="visible", timeout=30000)
             
@@ -398,7 +409,7 @@ class BrowserManager:
                 logger.info("\t├── Level: " + stats.get('level', 'N/A'))
                 logger.info("\t├── Income: " + format_number(stats.get('income')) + "/hour")
                 logger.info("\t├── Population: " + format_number(stats.get('population')))
-                logger.info("\t└── Balance: " + format_number(stats.get('balance')))
+                logger.info("\t└─��� Balance: " + format_number(stats.get('balance')))
                 print("")
 
             return stats
