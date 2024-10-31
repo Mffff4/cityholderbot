@@ -16,6 +16,7 @@
 5. [Support and Donations](#support-and-donations)
 6. [Contacts](#contacts)
 7. [Disclaimer](#disclaimer)
+8. [Using Proxies](#using-proxies)
 ---
 
 ## 📜 Description
@@ -148,3 +149,31 @@ The author is not responsible for:
 - Account blocking or access restrictions
 
 Use the bot at your own risk and in compliance with applicable laws and third-party service terms of use.
+
+---
+
+## 🌐 Using Proxies
+
+1. Create a `proxies.txt` file in the project root directory
+2. Add proxies in any of the following formats:
+   ```
+   protocol://username:password@host:port
+   username:password@host:port
+   host:port:username:password
+   host:port
+   ```
+   
+   Examples:
+   ```
+   socks5://user:pass@1.2.3.4:1234
+   http://admin:12345@proxy.example.com:8080
+   1.2.3.4:1234:user:pass
+   5.6.7.8:8080
+   ```
+
+3. In the `.env` file, set the parameter:
+   ```
+   USE_PROXY_FROM_FILE=True
+   ```
+
+Each proxy should be on a new line. Supported protocols: http, https, socks4, socks5.
