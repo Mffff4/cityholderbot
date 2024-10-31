@@ -6,7 +6,7 @@
 
 ---
 
-## 📑 Table of Contents <a name="table-of-contents"></a>
+## 📑 Table of Contents
 1. [Description](#description)
 2. [Key Features](#key-features)
 3. [Installation](#installation)
@@ -18,10 +18,10 @@
 7. [Disclaimer](#disclaimer)
 ---
 
-## 📜 Description <a name="description"></a>
+## 📜 Description
 City Holder Bot is an automated bot for the City Holder game in Telegram. It helps manage the city, gather resources, and perform upgrades automatically.
 
-## 🌟 Key Features <a name="key-features"></a>
+## 🌟 Key Features
 - 🏙️ Automatic city management
 - 💰 Resource collection and tap execution
 - 🏗️ Automatic building upgrades
@@ -30,9 +30,9 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 
 ---
 
-## 🛠️ Installation <a name="installation"></a>
+## 🛠️ Installation
 
-### Quick Start <a name="quick-start"></a>
+### Quick Start
 1. **Download the project:**
    ```bash
    git clone https://github.com/Mffff4/cityholderbot.git
@@ -58,7 +58,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
    python3 main.py -a 2  # Start the bot
    ```
 
-### Manual Installation <a name="manual-installation"></a>
+### Manual Installation
 1. **Linux:**
    ```bash
    sudo sh install.sh
@@ -81,7 +81,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 
 ---
 
-## ⚙️ Settings <a name="settings"></a>
+## ⚙️ Settings
 
 | Setting | Default Value | Description |
 |---------|---------------|-------------|
@@ -111,7 +111,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 
 ---
 
-## 💰 Support and Donations <a name="support-and-donations"></a>
+## 💰 Support and Donations
 
 Support the development with cryptocurrency or platforms:
 
@@ -132,13 +132,13 @@ Support the development with cryptocurrency or platforms:
 
 ---
 
-## 📞 Contacts <a name="contacts"></a>
+## 📞 Contacts
 
 If you have any questions or suggestions:
 - **Telegram**: [Join our channel](https://t.me/+0C-gh0mKBzxiNzky)
 ---
 
-## ⚠️ Disclaimer <a name="disclaimer"></a>
+## ⚠️ Disclaimer
 
 This software is provided "as is" without any warranties of any kind. By using this bot, you accept full responsibility for its use and any consequences that may arise.
 
