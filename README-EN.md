@@ -91,6 +91,7 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 | SLEEP_TIME | [1900, 2000] | Sleep time range between cycles (in seconds) |
 | USE_PROXY_FROM_FILE | False | Use proxy from file |
 | FULL_LOG_INFO | False | Enable full logging |
+| CYCLE_WAIT_TIME | 10 | Wait time between cycles (in minutes) |
 | RANDOM_DELAY | [0.5, 3.0] | Random delay range (in seconds) |
 | BROWSER_THREAD_TIMEOUT | [600, 1800] | Timeout for browser thread (in seconds) |
 | BROWSER_CREATION_TIMEOUT | [120, 300] | Timeout for browser creation (in seconds) |

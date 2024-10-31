@@ -17,6 +17,7 @@ init(autoreset=True)
 from bot.bot import run_cycle
 from bot.logger.logger import logger
 from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients
+from bot.config.config import config
 
 def clear_screen():
     if platform.system() == 'Windows':
@@ -56,7 +57,7 @@ async def process() -> None:
             cycle_count += 1
             logger.info(f"Starting cycle {cycle_count}")
             await run_tasks()
-            wait_time = 10 
+            wait_time = config.CYCLE_WAIT_TIME
             logger.info(f"Cycle {cycle_count} completed. All sessions processed.")
             logger.info(f"Sleeping for {wait_time} minutes before next cycle...")
             

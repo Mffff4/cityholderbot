@@ -13,6 +13,8 @@ class Config(BaseSettings):
     REF_ID: int = 228618799
     LOGGER_FORMAT: str = "{message}"
 
+    CYCLE_WAIT_TIME: int = 10
+
     RANDOM_DELAY: List[float] = [0.5, 3.0]
     BROWSER_THREAD_TIMEOUT: List[int] = [600, 1800]
     BROWSER_CREATION_TIMEOUT: List[int] = [120, 300]
