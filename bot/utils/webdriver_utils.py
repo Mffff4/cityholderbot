@@ -41,7 +41,21 @@ class BrowserManager:
                 browser_args.append("--headless=new")
 
             proxy_config = None
+            proxy_config = None
             if self.proxy:
+                try:
+                    proxy_obj = Proxy.from_str(self.proxy)
+                    proxy_config = {
+                        "server": f"{proxy_obj.protocol or 'http'}://{proxy_obj.host}:{proxy_obj.port}",
+                    }
+                    if proxy_obj.login and proxy_obj.password:
+                        proxy_config.update({
+                            "username": proxy_obj.login,
+                            "password": proxy_obj.password,
+                        })
+                    logger.info(f"{self.account_name} | Browser using proxy: {proxy_obj.host}:{proxy_obj.port}")
+                except Exception as e:
+                    logger.error(f"{self.account_name} | Error configuring browser proxy: {e}")
                 try:
                     proxy_obj = Proxy.from_str(self.proxy)
                     proxy_config = {
@@ -58,6 +72,8 @@ class BrowserManager:
 
             self.browser = await playwright.chromium.launch(
                 args=browser_args,
+                headless=config.BROWSER_CONFIG["headless"],
+                proxy=proxy_config if proxy_config else None
                 headless=config.BROWSER_CONFIG["headless"],
                 proxy=proxy_config if proxy_config else None
             )
