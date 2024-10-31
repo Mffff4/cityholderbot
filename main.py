@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import suppress
 import sys
 from bot.launch import process
 
@@ -14,7 +13,7 @@ if __name__ == '__main__':
         try:
             asyncio.run(main())
         except KeyboardInterrupt:
-            print(f"    🤖 До скорого, до следующего запуска <3")
+            print(f"    🤖 See you later, crypto farmer! Keep on clicking! 🌟")
             sys.exit(0)
         except Exception as e:
             print(e)

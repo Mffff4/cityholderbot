@@ -2,9 +2,15 @@ import argparse
 import asyncio
 from itertools import cycle
 from colorama import init, Fore, Style
-import logging
-import sys
 import time
+import os
+import platform
+from pyrogram.errors import RPCError
+import warnings
+import logging
+
+logging.getLogger('pyrogram').setLevel(logging.ERROR)
+warnings.filterwarnings("ignore")
 
 init(autoreset=True)  
 
@@ -12,11 +18,19 @@ from bot.bot import run_cycle
 from bot.logger.logger import logger
 from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients
 
+def clear_screen():
+    if platform.system() == 'Windows':
+        os.system('cls')
+    else:
+        os.system('clear')
+
 async def process() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--action', type=int, help='Action to perform')
 
-    logger.info("Обнаружено {} сессий | {} прокси".format(len(get_session_names()), len(get_proxies())))
+    clear_screen()
+    
+    logger.info("Found {} sessions | {} proxies".format(len(get_session_names()), len(get_proxies())))
 
     action = parser.parse_args().action
 
@@ -27,9 +41,9 @@ async def process() -> None:
             action = input("> ")
 
             if not action.isdigit():
-                logger.warning("Неправильный ответ! Это должно быть число")
+                logger.warning("Invalid input! Must be a number")
             elif action not in ['1', '2']:
-                logger.warning("Ну и для кого я выводил этот список? Там же они пронумированы")
+                logger.warning("Please select from the numbered options shown")
             else:
                 action = int(action)
                 break
@@ -40,11 +54,11 @@ async def process() -> None:
         cycle_count = 0
         while True:
             cycle_count += 1
-            logger.info(f"Начинаю цикл {cycle_count}")
+            logger.info(f"Starting cycle {cycle_count}")
             await run_tasks()
             wait_time = 10 
-            logger.info(f"Цикл {cycle_count} завершен. Все сессии обработаны.")
-            logger.info(f"Ухожу в сон на {wait_time} минут перед следующим циклом...")
+            logger.info(f"Cycle {cycle_count} completed. All sessions processed.")
+            logger.info(f"Sleeping for {wait_time} minutes before next cycle...")
             
             start_time = time.time()
             end_time = start_time + wait_time * 60
@@ -53,11 +67,11 @@ async def process() -> None:
                 remaining = int(end_time - time.time())
                 mins, secs = divmod(remaining, 60)
                 timeformat = f"{mins:02d}:{secs:02d}"
-                print(f"\rДо следующего цикла осталось: {timeformat}", end="", flush=True)
+                print(f"\rTime until next cycle: {timeformat}", end="", flush=True)
                 await asyncio.sleep(1)
             
             print() 
-            logger.info(f"Просыпаюсь. Начинаю цикл {cycle_count + 1}")
+            logger.info(f"Waking up. Starting cycle {cycle_count + 1}")
             logger.info("=" * 50)
 
 
@@ -68,42 +82,61 @@ async def run_tasks():
     proxies_cycle = cycle(proxies) if proxies else None
     
     try:
+        for client in tg_clients:
+            client.parse_mode = None
+            client.no_updates = True
+            if hasattr(client, '_handle_updates'):
+                client._handle_updates = lambda *args, **kwargs: None
+        
         await run_cycle(tg_clients, [next(proxies_cycle) if proxies_cycle else None for _ in tg_clients], lock)
     except Exception as e:
-        logger.error(f"Ошибка при выполнении цикла: {e}")
+        if not isinstance(e, (RPCError, KeyError, ValueError)):
+            logger.error(f"Error during cycle execution: {e}")
     finally:
         for tg_client in tg_clients:
             try:
-                if tg_client.is_connected:
-                    await tg_client.stop()
-            except Exception as e:
-                logger.warning(f"Ошибка при закрытии клиента {tg_client.name}: {e}")
+                if hasattr(tg_client, 'is_connected') and tg_client.is_connected:
+                    try:
+                        await tg_client.stop()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
     
-    logger.info("Все сессии обработаны. Завершаем текущий цикл.")
+    logger.info("All sessions processed. Ending current cycle.")
 
 
 def print_colored_ascii_art():
-    ascii_art = [
-        " .o88b. d888888b d888888b db    db db   db  .d88b.  db      d8888b. d88888b d8888b.",
-        "d8P  Y8   `88'   `~~88~~' `8b  d8' 88   88 .8P  Y8. 88      88  `8D 88'     88  `8D",
-        "8P         88       88     `8bd8'  88ooo88 88    88 88      88   88 88ooooo 88oobY'",
-        "8b         88       88       88    88~~~88 88    88 88      88   88 88~~~~~ 88`8b  ",
-        "Y8b  d8   .88.      88       88    88   88 `8b  d8' 88booo. 88  .8D 88.     88 `88.",
-        " `Y88P' Y888888P    YP       YP    YP   YP  `Y88P'  Y88888P Y8888D' Y88888P 88   YD"
-    ]
+    start_text = f"""
+{Fore.RED}ВНИМАНИЕ: Эта ферма не предназначена для продажи!{Style.RESET_ALL}
+{Fore.RED}WARNING: This farm is not for sale!{Style.RESET_ALL}
+{Fore.RED}¡ADVERTENCIA: ¡Esta granja no está a la venta!{Style.RESET_ALL}
+{Fore.RED}ATTENTION: Cette ferme n'est pas à vendre!{Style.RESET_ALL}
+{Fore.RED}ACHTUNG: Diese Farm ist nicht zum Verkauf bestimmt!{Style.RESET_ALL}
+{Fore.RED}ATTENZIONE: Questa fattoria non è in vendita!{Style.RESET_ALL}
+{Fore.RED}注意：この農場は販売用ではありません！{Style.RESET_ALL}
+{Fore.RED}주의: 이 농장은 판매용이 아닙니다!{Style.RESET_ALL}
+{Fore.RED}注意：此农场不用于销售！{Style.RESET_ALL}
+{Fore.RED}ATENÇÃO: Esta fazenda não se destina à venda!{Style.RESET_ALL}
 
-    divider = len(ascii_art) // 2
 
-    for i, line in enumerate(ascii_art):
-        if i < divider:
-            print(Fore.WHITE + line)
-        else:
-            print(Fore.YELLOW + line)
+{Fore.CYAN}
+ .o88b. d888888b d888888b db    db db   db  .d88b.  db      d8888b. d88888b d8888b.
+d8P  Y8   `88'   `~~88~~' `8b  d8' 88   88 .8P  Y8. 88      88  `8D 88'     88  `8D
+8P         88       88     `8bd8'  88ooo88 88    88 88      88   88 88ooooo 88oobY'
+8b         88       88       88    88~~~88 88    88 88      88   88 88~~~~~ 88`8b  
+Y8b  d8   .88.      88       88    88   88 `8b  d8' 88booo. 88  .8D 88.     88 `88.
+ `Y88P' Y888888P    YP       YP    YP   YP  `Y88P'  Y88888P Y8888D' Y88888P 88   YD
+{Style.RESET_ALL}
+{Fore.YELLOW}Select action:{Style.RESET_ALL}
 
-    print(Style.RESET_ALL)  
-    print(Fore.WHITE + "\nСделал: @mffff4 с любовью")
-    print(Fore.YELLOW + "\n1. Создать новую сессию")
-    print(Fore.YELLOW + "2. Запустить бота")
+    {Fore.GREEN}1. Create session{Style.RESET_ALL}
+    {Fore.GREEN}2. Launch clicker{Style.RESET_ALL}
+
+{Fore.CYAN}Developed by: @Mffff4{Style.RESET_ALL}
+{Fore.CYAN}Our Telegram channel: {Fore.BLUE}https://t.me/+l3roJWT9aRNkMjUy{Style.RESET_ALL}
+"""
+    print(start_text)
 
 if __name__ == "__main__":
     print_colored_ascii_art()

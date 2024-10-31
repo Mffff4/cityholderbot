@@ -1,17 +1,13 @@
-version: '3.8'
-
+name: cityholder
 services:
   bot:
     build: .
     container_name: cityholder-bot
     volumes:
       - ./sessions:/app/sessions
-      - ./webdriver:/app/webdriver
       - ./.env:/app/.env:ro
-      - /tmp/.X11-unix:/tmp/.X11-unix
     environment:
       - TZ=Europe/Moscow
-      - DISPLAY=:99
       - PYTHONUNBUFFERED=1
     security_opt:
       - seccomp=unconfined
@@ -25,9 +21,3 @@ services:
           memory: 4G
         reservations:
           memory: 2G
-    entrypoint: >
-      bash -c "
-        Xvfb :99 -screen 0 1024x768x16 &
-        sleep 1 &&
-        python main.py -a 2
-      "

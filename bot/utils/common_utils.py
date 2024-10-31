@@ -2,27 +2,21 @@ import argparse
 import asyncio
 import glob
 import os
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Optional
 import random
 import aiohttp
 from better_proxy import Proxy
 from pyrogram import Client
-from pyrogram.errors import FloodWait, Unauthorized, UserDeactivated, AuthKeyUnregistered, UserNotParticipant, ChannelPrivate
 from pyrogram.raw.functions.messages import RequestAppWebView
 from pyrogram.raw.types import InputBotAppShortName
-from urllib.parse import unquote
 import traceback
 import json
 import urllib.parse
 import time
 import hashlib
-import hmac
-import selenium.webdriver as webdriver
-from selenium.webdriver.common.by import By
-import base64
 from bot import InvalidSession
 from bot.config import config
-from bot.logger.logger import logger, log_game_stats, gradient_progress_bar
+from bot.logger.logger import logger
 
 def escape_html(text: Any) -> str:
     text = str(text)
@@ -44,7 +38,6 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
     tg_client.proxy = proxy_dict
 
     try:
-        # Убедимся, что клиент подключен
         if not tg_client.is_connected:
             await tg_client.start()
             
@@ -76,10 +69,9 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
         start_param = ref_value
         
         try:
-            # Сначала получаем информацию о боте
             bot = await tg_client.get_users("cityholder")
             if not bot:
-                logger.error(f"{tg_client.name} | Не удалось найти бота cityholder")
+                logger.error(f"{tg_client.name} | Failed to find cityholder bot")
                 return None
                 
             peer = await tg_client.resolve_peer(bot.id)
@@ -125,13 +117,13 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
             return full_url
             
         except Exception as e:
-            logger.error(f"{tg_client.name} | Ошибка при получении веб-представления: {e}")
+            logger.error(f"{tg_client.name} | Web view request error: {e}")
             return None
 
     except InvalidSession as error:
         raise error
     except Exception as error:
-        logger.error(f"{tg_client.name} | Неизвестная ошибка при авторизации: {error}")
+        logger.error(f"{tg_client.name} | Unknown authorization error: {error}")
         logger.error(f"{tg_client.name} | Traceback: {traceback.format_exc()}")
         await asyncio.sleep(3)
         return None
@@ -162,7 +154,7 @@ def get_session_names() -> list[str]:
 async def get_tg_clients() -> list[Client]:
     session_names = get_session_names()
     if not session_names:
-        raise FileNotFoundError("Not found session files")
+        raise FileNotFoundError("No session files found")
     if not config.API_ID or not config.API_HASH:
         raise ValueError("API_ID and API_HASH not found in the .env file.")
     tg_clients = [
@@ -170,7 +162,8 @@ async def get_tg_clients() -> list[Client]:
             name=session_name,
             api_id=config.API_ID,
             api_hash=config.API_HASH,
-            workdir="sessions/"
+            workdir="sessions/",
+            no_updates=True
         )
         for session_name in session_names
     ]
@@ -209,78 +202,3 @@ async def async_random_delay(delay: List[float] = config.RANDOM_DELAY) -> float:
     delay_time = random_delay(delay)
     await asyncio.sleep(delay_time)
     return delay_time
-
-def touch_element(driver, element):
-    driver.execute_script("""
-    function simulateTouch(element) {
-        var rect = element.getBoundingClientRect();
-        var x = rect.left + rect.width / 2;
-        var y = rect.top + rect.height / 2;
-        
-        var touchObj = new Touch({
-            identifier: Date.now(),
-            target: element,
-            clientX: x,
-            clientY: y,
-            pageX: x,
-            pageY: y,
-            radiusX: 2.5,
-            radiusY: 2.5,
-            rotationAngle: 10,
-            force: 0.5,
-        });
-
-        var touchEvent = new TouchEvent("touchstart", {
-            cancelable: true,
-            bubbles: true,
-            touches: [touchObj],
-            targetTouches: [touchObj],
-            changedTouches: [touchObj],
-            view: window,
-        });
-        
-        element.dispatchEvent(touchEvent);
-        
-        setTimeout(function() {
-            var endEvent = new TouchEvent("touchend", {
-                cancelable: true,
-                bubbles: true,
-                touches: [],
-                targetTouches: [],
-                changedTouches: [touchObj],
-                view: window,
-            });
-            element.dispatchEvent(endEvent);
-            
-            element.click();
-        }, 50);
-    }
-    
-    simulateTouch(arguments[0]);
-    """, element)
-
-def extract_game_stats(driver, account_name):
-    try:
-        stats = {}
-        budget = driver.execute_script('return document.querySelector("#budget")?.textContent')
-        income = driver.execute_script('return document.querySelector("#income")?.textContent')
-        population = driver.execute_script('return document.querySelector("#population")?.textContent')
-        if budget:
-            stats["Бюджет"] = budget
-        if income:
-            stats["Доход"] = ''.join(filter(str.isdigit, income))
-        if population:
-            stats["Население"] = ''.join(filter(str.isdigit, population))
-        try:
-            money_element = driver.find_element(By.CLASS_NAME, "_money_1foyq_16")
-            stats["Всего денег"] = money_element.text
-        except Exception:
-            logger.warning(f"{account_name} | Не удалось получить общее количество денег")
-        try:
-            holder_power_element = driver.find_element(By.CLASS_NAME, "_title_14n1y_5")
-            stats["Сила Холдера"] = holder_power_element.text.split()[-1]
-        except Exception:
-            logger.warning(f"{account_name} | Не удалось получить силу Холдера")
-        log_game_stats(account_name, stats)
-    except Exception as e:
-        logger.error(f"{account_name} | Ошибка при извлечении статистики игры: {e}")

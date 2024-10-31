@@ -1,8 +1,5 @@
 # City Holder Bot 🏠
 
-> ⚠️ **Important Warning**: 
-> This bot uses Selenium for automation, which can be an unstable solution. Future updates are not guaranteed. Use at your own risk.
-
 [![Bot Link](https://img.shields.io/badge/Telegram-Bot_Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/cityholder/game?startapp=228618799)
 [![Channel Link](https://img.shields.io/badge/Telegram-Channel_Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+0C-gh0mKBzxiNzky)
 [![Bot Collection](https://img.shields.io/badge/Bot_Collection-Link-blue?style=for-the-badge&logo=Telegram&logoColor=white)](https://t.me/+uF4lQD9ZEUE4NGUy)
@@ -18,7 +15,7 @@
 4. [Settings](#settings)
 5. [Support and Donations](#support-and-donations)
 6. [Contacts](#contacts)
-
+7. [Disclaimer](#disclaimer)
 ---
 
 ## 📜 Description
@@ -94,7 +91,6 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 | SLEEP_TIME | [1900, 2000] | Sleep time range between cycles (in seconds) |
 | USE_PROXY_FROM_FILE | False | Use proxy from file |
 | FULL_LOG_INFO | False | Enable full logging |
-| HEADLESS | True | Run the browser in the background |
 | RANDOM_DELAY | [0.5, 3.0] | Random delay range (in seconds) |
 | BROWSER_THREAD_TIMEOUT | [600, 1800] | Timeout for browser thread (in seconds) |
 | BROWSER_CREATION_TIMEOUT | [120, 300] | Timeout for browser creation (in seconds) |
@@ -103,6 +99,14 @@ City Holder Bot is an automated bot for the City Holder game in Telegram. It hel
 | PAGE_LOAD_DELAY | [2, 4] | Page load delay range (in seconds) |
 | CITY_BUTTON_CLICK_DELAY | [3, 5] | Delay range after clicking the city button (in seconds) |
 | BUILD_BUTTON_CLICK_DELAY | [2, 4] | Delay range after clicking the build button (in seconds) |
+| SCRIPT_TIMEOUT | [600, 1800] | Script execution timeout (in seconds) |
+| PAGE_LOAD_TIMEOUT | 30 | Page load timeout (in seconds) |
+| NAVIGATION_TIMEOUT | 30 | Navigation timeout (in seconds) |
+| SCRIPT_UPGRADE.max_execution_time | 180000 | Maximum upgrade script execution time (in milliseconds) |
+| SCRIPT_UPGRADE.no_change_timeout | 30000 | No change timeout (in milliseconds) |
+| SCRIPT_UPGRADE.click_delay | 2000 | Delay between clicks (in milliseconds) |
+| SCRIPT_UPGRADE.post_click_delay | 1500 | Post-click delay (in milliseconds) |
+| SCRIPT_UPGRADE.final_delay | 1000 | Final delay (in milliseconds) |
 
 ---
 
@@ -131,3 +135,15 @@ Support the development with cryptocurrency or platforms:
 
 If you have any questions or suggestions:
 - **Telegram**: [Join our channel](https://t.me/+0C-gh0mKBzxiNzky)
+---
+
+## ⚠️ Disclaimer
+
+This software is provided "as is" without any warranties of any kind. By using this bot, you accept full responsibility for its use and any consequences that may arise.
+
+The author is not responsible for:
+- Any direct or indirect damages related to the use of the bot
+- Possible violations of third-party service terms of use
+- Account blocking or access restrictions
+
+Use the bot at your own risk and in compliance with applicable laws and third-party service terms of use.

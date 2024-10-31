@@ -1,166 +1,168 @@
 import time
-import json
 import asyncio
 import traceback
-from typing import Optional, List, Dict
+from typing import Optional
 import random
-from bot.utils.common_utils import random_delay, touch_element, extract_game_stats
-
-import undetected_chromedriver as uc
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.common.exceptions import WebDriverException, TimeoutException
-from tqdm import tqdm
+from playwright.async_api import async_playwright
 
 from bot.config import config
-from bot.logger.logger import logger, log_game_stats, gradient_progress_bar
-from colorama import Fore
-import signal
-import os
+from bot.logger.logger import logger, gradient_progress_bar
+import math
 
 class BrowserManager:
     def __init__(self, account_name: str, auth_url: str, proxy: Optional[str] = None):
         self.account_name = account_name
         self.auth_url = auth_url
         self.proxy = proxy or config.PROXY
-        self.driver = None
+        self.browser = None
+        self.context = None
+        self.page = None
 
-    def create_driver(self) -> uc.Chrome:
+    async def create_browser(self):
         try:
-            options = uc.ChromeOptions()
-            mobile_user_agent = config.MOBILE_USER_AGENT
-            window_width, window_height = config.WINDOW_SIZE
-            options.add_argument(f'user-agent={mobile_user_agent}')
-            options.add_argument(f"--window-size={window_width},{window_height}")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            if config.HEADLESS:
-                options.add_argument("--headless=new")
-            options.add_argument("--lang=" + config.LANGUAGE)
-            options.set_capability('goog:loggingPrefs', {'browser': 'ALL', 'performance': 'ALL'})
-            options.add_argument("--verbose")
-            options.add_argument("--log-level=0")
-            options.add_argument("--page-load-strategy=eager")
+            playwright = await async_playwright().start()
+            
+            window_width, window_height = config.BROWSER_CONFIG["window_size"]
+            mobile_user_agent = config.BROWSER_CONFIG["mobile_user_agent"]
+
+            browser_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                f"--window-size={window_width},{window_height}",
+                "--lang=" + config.BROWSER_CONFIG["language"],
+                "--verbose",
+                "--log-level=0"
+            ]
+
+            if config.BROWSER_CONFIG["headless"]:
+                browser_args.append("--headless=new")
 
             if self.proxy:
-                options.add_argument(f'--proxy-server={self.proxy}')
-                logger.info(f"{self.account_name} | Установлен прокси: {self.proxy}")
+                browser_args.append(f"--proxy-server={self.proxy}")
+                logger.info(f"{self.account_name} | Proxy set: {self.proxy}")
 
-            if os.path.exists('/.dockerenv'):
-                options.binary_location = '/usr/bin/chromium'
-                try:
-                    import subprocess
-                    chromium_version = subprocess.check_output(['/usr/bin/chromium', '--version']).decode()
-                    version_main = int(chromium_version.split()[1].split('.')[0])
-                    logger.info(f"{self.account_name} | Обнаружена версия Chromium: {version_main}")
-                except Exception as e:
-                    logger.warning(f"{self.account_name} | Не удалось определить версию Chromium: {e}")
-                    version_main = 108
-                
-                self.driver = uc.Chrome(
-                    options=options,
-                    driver_executable_path='/usr/bin/chromedriver',
-                    version_main=version_main,
-                    enable_cdp_events=True
-                )
-            else:
-                self.driver = uc.Chrome(
-                    options=options,
-                    version_main=129,
-                    enable_cdp_events=True
-                )
+            self.browser = await playwright.chromium.launch(
+                args=browser_args,
+                headless=config.BROWSER_CONFIG["headless"]
+            )
+
+            context_params = {
+                "viewport": {"width": window_width, "height": window_height},
+                "user_agent": mobile_user_agent,
+                "device_scale_factor": 3,
+                "is_mobile": True,
+                "has_touch": True
+            }
+
+            self.context = await self.browser.new_context(**context_params)
+            self.page = await self.context.new_page()
+
+            await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
 
             script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
             page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
-            
-            self.driver.set_page_load_timeout(page_load_timeout)
-            self.driver.set_script_timeout(script_timeout)
-            
-            logger.info(f"{self.account_name} | Драйвер создан успешно. Таймауты: {script_timeout}с/{page_load_timeout}с")
 
-            self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
-                "width": window_width,
-                "height": window_height,
-                "deviceScaleFactor": 3,
-                "mobile": True,
-                "screenOrientation": {"type": "portraitPrimary", "angle": 0}
-            })
-            
-            self.driver.execute_cdp_cmd("Network.setUserAgentOverride", {
-                "userAgent": mobile_user_agent,
-                "platform": "Android",
-                "acceptLanguage": config.LANGUAGE
-            })
-            
-            self.driver.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
-            self.driver.execute_cdp_cmd("Emulation.setEmitTouchEventsForMouse", {"enabled": True})
-            
-            headers = config.NETWORK_HEADERS.copy()
-            headers["User-Agent"] = mobile_user_agent
-            self.driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": headers})
+            self.page.set_default_timeout(page_load_timeout * 1000)
+            self.page.set_default_navigation_timeout(script_timeout * 1000)
+
+            logger.info(f"{self.account_name} | Browser created successfully. Timeouts: {script_timeout}s/{page_load_timeout}s")
 
             try:
-                logger.info(f"{self.account_name} | Загрузка страницы авторизации...")
-                self.driver.get(self.auth_url)
-                logger.info(f"{self.account_name} | Страница авторизации загружена успешно")
+                logger.info(f"{self.account_name} | Loading auth page...")
+                await self.page.goto(self.auth_url)
+                logger.info(f"{self.account_name} | Auth page loaded successfully")
             except Exception as e:
-                logger.error(f"{self.account_name} | Ошибка при загрузке страницы: {e}")
+                logger.error(f"{self.account_name} | Error loading page: {e}")
                 raise
 
-            return self.driver
+            return self.page
+
         except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при создании драйвера: {e}")
+            logger.error(f"{self.account_name} | Error creating browser: {e}")
             logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
             raise
 
-    def quit_driver(self):
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                logger.error(f"{self.account_name} | Ошибка при закрытии браузера: {e}")
+    async def close_browser(self):
+        try:
+            if self.page:
+                try:
+                    await self.page.close()
+                except Exception as e:
+                    logger.debug(f"{self.account_name} | Error closing page: {e}")
+            
+            if self.context:
+                try:
+                    await self.context.close()
+                except Exception as e:
+                    logger.debug(f"{self.account_name} | Error closing context: {e}")
+            
+            if self.browser:
+                try:
+                    await self.browser.close()
+                except Exception as e:
+                    logger.debug(f"{self.account_name} | Error closing browser: {e}")
+        except Exception as e:
+            logger.error(f"{self.account_name} | Error closing browser: {e}")
 
     async def upgrade_city(self):
         try:
-            logger.info(f"{self.account_name} | Начинаем улучшение города")
+            logger.info(f"{self.account_name} | Starting city upgrade")
             
-            upgrade_script = f"""
-            const callback = arguments[arguments.length - 1];
-            const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-            async function upgrade() {{
+            upgrade_result = await self.page.evaluate(f"""
+            async () => {{
+                const sleep = ms => new Promise(r => setTimeout(r, ms));
                 let missingButtons = [];
                 let upgradedCount = 0;
                 let noUpgradesAvailable = true;
-                let tabs = Array.from(document.querySelectorAll('[class^="_buildNav"] [class^="_navItem"]'))
-                    .filter(item => item.querySelector('[class^="_count"]'));
-
+                
                 const startTime = Date.now();
-                const maxExecutionTime = {config.SCRIPT_UPGRADE_MAX_EXECUTION_TIME};
-                const noChangeTimeout = {config.SCRIPT_UPGRADE_NO_CHANGE_TIMEOUT};
+                const maxExecutionTime = {config.SCRIPT_UPGRADE['max_execution_time']};
+                const noChangeTimeout = {config.SCRIPT_UPGRADE['no_change_timeout']};
                 let lastChangeTime = startTime;
 
-                for (let t of tabs) {{
+                let tabs = Array.from(document.querySelectorAll('[class^="_buildNav"] [class^="_navItem"]'))
+                    .filter(item => item.querySelector('[class^="_count"]'));
+                
+                const reorderedTabs = [
+                    ...tabs.slice(1, 4),
+                    tabs[0],
+                    ...tabs.slice(4)
+                ];
+
+                for (let t of reorderedTabs) {{
                     if (Date.now() - startTime > maxExecutionTime) {{
-                        console.log("Превышено максимальное время выполнения скрипта");
+                        console.log("Maximum execution time exceeded");
                         break;
                     }}
 
                     if (Date.now() - lastChangeTime > noChangeTimeout) {{
-                        console.log("Нет изменений в течение 30 секунд, завершае улучшение");
+                        console.log("No changes for 30 seconds, finishing upgrade");
                         break;
                     }}
 
-                    t.click();
-                    await sleep({config.SCRIPT_UPGRADE_SLEEP_TIMES['click_delay']});
+                    let clickAttempts = 0;
+                    const maxClickAttempts = 3;
+                    
+                    while (clickAttempts < maxClickAttempts) {{
+                        t.click();
+                        await sleep(500);
+                        
+                        if (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true') {{
+                            break;
+                        }}
+                        
+                        clickAttempts++;
+                        await sleep(200);
+                    }}
+
+                    await sleep({config.SCRIPT_UPGRADE['click_delay']});
 
                     let items = Array.from(document.querySelectorAll('[class^="_buildPreview"]'))
                         .filter(item => !item.classList.contains('disabled') && 
-                                        !item.querySelector('[class^="_cooldown"]') &&
-                                        !item.querySelector('button[disabled]'));
+                                    !item.querySelector('[class^="_cooldown"]') &&
+                                    !item.querySelector('button[disabled]'));
 
                     if (items.length > 0) {{
                         noUpgradesAvailable = false;
@@ -168,12 +170,10 @@ class BrowserManager:
 
                     for (let item of items) {{
                         if (Date.now() - startTime > maxExecutionTime) {{
-                            console.log("Превышено максимальное время выполнения скрипта");
                             break;
                         }}
 
                         if (Date.now() - lastChangeTime > noChangeTimeout) {{
-                            console.log("Нет изменений в течение 30 секунд, завершаем улучшение");
                             break;
                         }}
 
@@ -182,7 +182,7 @@ class BrowserManager:
                             button.click();
                             upgradedCount++;
                             lastChangeTime = Date.now();
-                            await sleep({config.SCRIPT_UPGRADE_SLEEP_TIMES['post_click_delay']});
+                            await sleep({config.SCRIPT_UPGRADE['post_click_delay']});
 
                             let detailButton = document.querySelector('[class^="_buildDetail"] button');
                             if (detailButton) {{
@@ -194,261 +194,314 @@ class BrowserManager:
                         }}
                     }}
 
-                    await sleep({config.SCRIPT_UPGRADE_SLEEP_TIMES['final_delay']});
-
-                    // Добавляем отсчет в консоль браузера
-                    const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-                    const remainingTime = Math.max(0, Math.floor(maxExecutionTime / 1000 - elapsedTime));
-                    console.log(`Прошло времени: ${{elapsedTime}} сек. Осталось времени: ${{remainingTime}} сек.`);
+                    await sleep({config.SCRIPT_UPGRADE['final_delay']});
                 }}
 
                 return {{
-                    message: noUpgradesAvailable ? "Нет доступных улучшений" : "Улучшение завершено",
+                    message: noUpgradesAvailable ? "No upgrades available" : "Upgrade completed",
                     missingButtons: missingButtons,
                     upgradedCount: upgradedCount,
                     noUpgradesAvailable: noUpgradesAvailable
                 }};
             }}
+            """)
 
-            upgrade().then(result => callback(result)).catch(error => callback(null));
-            """
-            
-            result = self.driver.execute_async_script(upgrade_script)
-            
-            if result is None:
-                logger.warning(f"{self.account_name} | Скрипт улучшения города вернул None")
-                return False
+            logger.info(f"{self.account_name} | Upgrades completed: {upgrade_result['upgradedCount']}")
+            if upgrade_result['missingButtons']:
+                logger.debug(f"{self.account_name} | Missing buttons: {upgrade_result['missingButtons']}")
+            return not upgrade_result['noUpgradesAvailable']
 
-            logger.info(f"{self.account_name} | Выполнено улучшений: {result.get('upgradedCount', 0)}")
-            if result.get('missingButtons'):
-                logger.debug(f"{self.account_name} | Отсутствующие кнопки: {result.get('missingButtons')}")
-            return not result.get('noUpgradesAvailable', True) 
-        
         except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при улучшении города: {e}")
+            logger.error(f"{self.account_name} | Error upgrading city: {e}")
             logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
             return False
 
-    
     async def find_and_click_build_button(self):
-        try:            
-            js_code = """
-            function clickBuildButton() {
-                const buildButton = document.querySelector('a._btnBuildWrapper_xw841_23[href="/city/build"]');
-                if (buildButton) {
-                    buildButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    buildButton.click();
-                    return true;
-                }
-                return false;
-            }
-            return clickBuildButton();
-            """
-            
-            result = self.driver.execute_script(js_code)
-            
-            if result:
+        try:
+            build_button = await self.page.query_selector('a._btnBuildWrapper_xw841_23[href="/city/build"]')
+            if build_button:
+                await build_button.scroll_into_view_if_needed()
+                await build_button.click()
                 await asyncio.sleep(config.BUILD_BUTTON_CLICK_DELAY[0])
-                initial_url = self.driver.current_url
+                initial_url = self.page.url
                 try:
-                    WebDriverWait(self.driver, 10).until(EC.url_changes(initial_url))
-                    new_url = self.driver.current_url
-                except TimeoutException:
+                    await self.page.wait_for_url(lambda url: url != initial_url, timeout=10000)
+                except Exception:
                     pass
             else:
-                logger.info(f"{self.account_name} | Кнопка 'Строительство' не найдена или не нажата")
-            
+                logger.info(f"{self.account_name} | Build button not found")
+
         except Exception as e:
-            logger.info(f"{self.account_name} | Незначительная ошибка при поиске или клике по кнопке 'Строительство': {e}")
+            logger.info(f"{self.account_name} | Error finding or clicking build button: {e}")
 
     async def navigate_city(self):
         try:
-            WebDriverWait(self.driver, 30).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-
+            await self.page.wait_for_selector('body', timeout=30000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
-            city_button = WebDriverWait(self.driver, 30).until(
-                EC.element_to_be_clickable((
-                    By.XPATH, 
-                    f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and "
-                    f"(text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]"
-                ))
-            )
-            
-            touch_element(self.driver, city_button)
-            
-            initial_url = self.driver.current_url
-            WebDriverWait(self.driver, 10).until(EC.url_changes(initial_url))
-            new_url = self.driver.current_url
 
-            await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
+            city_button_selector = f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]"
+            city_button = await self.page.wait_for_selector(city_button_selector, state="visible", timeout=30000)
             
-            await self.find_and_click_build_button()
-            
-            upgrades_available = await self.upgrade_city()
-            
-            if not upgrades_available:
-                logger.info(f"{self.account_name} | Нет доступных улучшений.")
-                return True 
-            
-            return True
+            if city_button:
+                await city_button.click()
+                await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
+                
+                try:
+                    await self.page.wait_for_load_state('networkidle', timeout=30000)
+                    await self.find_and_click_build_button()
+                    upgrades_available = await self.upgrade_city()
+
+                    if not upgrades_available:
+                        logger.info(f"{self.account_name} | No upgrades available.")
+                        return True
+
+                    return True
+                except Exception as e:
+                    logger.error(f"{self.account_name} | Error waiting for page load: {e}")
+                    return False
+
+            return False
+
         except asyncio.CancelledError:
-            logger.warning(f"{self.account_name} | Навигация по городу была отменена")
+            logger.warning(f"{self.account_name} | Navigation cancelled")
             return False
         except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при навигации п городу: {e}")
+            logger.error(f"{self.account_name} | Error navigating city: {e}")
             logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
+            return False
         finally:
-            logger.info(f"{self.account_name} | Завершение сессии")
-            self.quit_driver()
-        
-        return False 
+            try:
+                logger.info(f"{self.account_name} | Session ended")
+                await self.close_browser()
+            except Exception as e:
+                logger.error(f"{self.account_name} | Error closing browser in finally block: {e}")
 
-    def log_browser_logs(self):
+    async def check_energy_and_tap_coins(self) -> int:
         try:
-            browser_logs = self.driver.get_log('browser')
-            for log in browser_logs:
-                logger.debug(f"{self.account_name} | Browser Log: {log}")
-        except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при получении браузерных логов: {e}")
+            energy_element = await self.page.wait_for_selector(f"#{config.SELECTORS['energy_element']}", timeout=10000)
+            energy_text = await energy_element.text_content()
+            current_energy = int(energy_text.split('/')[0].strip().replace(',', ''))
+            taps_remaining = current_energy
 
-    def log_performance_logs(self):
-        try:
-            performance_logs = self.driver.get_log('performance')
-            for log in performance_logs:
-                logger.debug(f"{self.account_name} | Performance Log: {log}")
-        except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при получении логов производительности: {e}")
+            coin_selector = "div[class*='_coin_']"
+            coin_element = await self.page.wait_for_selector(coin_selector, timeout=10000)
 
-    # def capture_websockets(self, output_file: str):
-    #     def log_websocket_event(message):
-    #         with open(output_file, 'a') as f:
-    #             json.dump(message, f)
-    #             f.write('\n')
-        
-    #     try:
-    #         self.driver.execute_cdp_cmd("Network.enable", {})
-    #         logger.warning(f"{self.account_name} | Захват WebSocket событий не реализован полностью.")
-    #     except Exception as e:
-    #         logger.error(f"{self.account_name} | Ошибка при захвате WebSocket событий: {e}")
+            if coin_element and taps_remaining > 0:
+                box = await coin_element.bounding_box()
+                if box:
+                    base_x = box['x'] + box['width'] / 2
+                    base_y = box['y'] + box['height'] / 2
 
-    def check_energy_and_tap_coins(self) -> int:
-        try:
-            energy_element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, config.SELECTORS["energy_element"]))
-            )
-            energy_text = energy_element.text
-            energy_amount = int(energy_text.split('/')[0].strip().replace(',', ''))
-            
-            coin_element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, config.SELECTORS["coin_image_xpath"]))
-            )
-            
-            with gradient_progress_bar(range(energy_amount), desc=f"{self.account_name} | Тапы по монетам", total=energy_amount) as pbar:
-                for _ in pbar:
-                    touch_element(self.driver, coin_element)
-                    time.sleep(random.uniform(0.005, 0.05))
-            
-            return energy_amount
+                    with gradient_progress_bar(range(current_energy), desc=f"{self.account_name} | Taps on coins", total=current_energy) as pbar:
+                        while taps_remaining > 0: 
+                            num_fingers = min(random.randint(1, 5), taps_remaining) 
+                            touch_points = []
+                            
+                            for i in range(num_fingers):
+                                angle = random.uniform(0, 2 * 3.14159)
+                                radius = random.uniform(10, 50)
+                                x = base_x + radius * math.cos(angle)
+                                y = base_y + radius * math.sin(angle)
+                                touch_points.append({"x": x, "y": y})
+
+                            await self.page.evaluate("""
+                                (points) => {
+                                    const touches = points.map((p, i) => new Touch({
+                                        identifier: i,
+                                        target: document.elementFromPoint(p.x, p.y),
+                                        clientX: p.x,
+                                        clientY: p.y,
+                                        radiusX: 2.5,
+                                        radiusY: 2.5,
+                                        rotationAngle: 10,
+                                        force: 1
+                                    }));
+
+                                    const touchStartEvent = new TouchEvent('touchstart', {
+                                        cancelable: true,
+                                        bubbles: true,
+                                        touches: touches,
+                                        targetTouches: touches,
+                                        changedTouches: touches
+                                    });
+
+                                    const touchEndEvent = new TouchEvent('touchend', {
+                                        cancelable: true,
+                                        bubbles: true,
+                                        touches: [],
+                                        targetTouches: [],
+                                        changedTouches: touches
+                                    });
+
+                                    document.elementFromPoint(points[0].x, points[0].y).dispatchEvent(touchStartEvent);
+                                    document.elementFromPoint(points[0].x, points[0].y).dispatchEvent(touchEndEvent);
+                                }
+                            """, touch_points)
+                            
+                            taps_remaining -= num_fingers  
+                            pbar.update(num_fingers)
+                            await asyncio.sleep(random.uniform(0.01, 0.05))
+
+            return current_energy
         except Exception as e:
-            logger.error(f"{self.account_name} | Ошибка при работе с энергией и монетами: {e}")
+            logger.error(f"{self.account_name} | Error checking energy and tapping coins: {e}")
             return 0
+
+    async def get_game_stats(self):
+        try:
+            stats = await self.page.evaluate("""() => {
+                const formatNumber = (text) => {
+                    if (!text) return null;
+                    return text.replace(/[^0-9]/g, '');
+                };
+
+                const stats = {};
+                
+                const levelElement = document.querySelector('div[class*="_title_14n1y_"]');
+                if (levelElement) {
+                    const levelText = levelElement.textContent;
+                    const levelMatch = levelText.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+                    if (levelMatch) {
+                        stats.level = `${levelMatch[1]}/${levelMatch[2]}`;
+                    }
+                }
+                
+                const incomeElement = document.querySelector('#income ._info_ji1yj_18');
+                if (incomeElement) {
+                    const incomeText = incomeElement.textContent;
+                    stats.income = formatNumber(incomeText);
+                }
+                
+                const populationElement = document.querySelector('#population ._info_ji1yj_18');
+                if (populationElement) {
+                    const populationText = populationElement.textContent;
+                    stats.population = formatNumber(populationText);
+                }
+                
+                const balanceElement = document.querySelector('div[class*="_money_"]');
+                if (balanceElement) {
+                    const balanceText = balanceElement.textContent;
+                    stats.balance = formatNumber(balanceText);
+                }
+                
+                return stats;
+            }""")
+            
+            if stats:
+                def format_number(num_str):
+                    if num_str and num_str.isdigit():
+                        return "{:,}".format(int(num_str)).replace(',', ' ')
+                    return 'N/A'
+                
+                print("")
+                logger.info(f"{self.account_name} | Game stats:")
+                logger.info("\t├── Level: " + stats.get('level', 'N/A'))
+                logger.info("\t├── Income: " + format_number(stats.get('income')) + "/hour")
+                logger.info("\t├── Population: " + format_number(stats.get('population')))
+                logger.info("\t└── Balance: " + format_number(stats.get('balance')))
+                print("")
+
+            return stats
+        except Exception as e:
+            logger.error(f"{self.account_name} | Error getting game stats: {e}")
+            return None
 
     async def run(self) -> bool:
         max_retries = config.MAX_RETRIES
         retry_delay = config.RETRY_DELAY
         thread_timeout = random.randint(*config.BROWSER_THREAD_TIMEOUT)
-        
-        logger.info(f"{self.account_name} | Установлен таймаут потока: {thread_timeout} секунд")
+
+        logger.info(f"{self.account_name} | Thread timeout set: {thread_timeout} seconds")
 
         for attempt in range(max_retries):
             try:
-                self.create_driver()                
-                self.driver.get(self.auth_url)           
-                initial_url = self.driver.current_url
+                await self.create_browser()
+                await self.page.goto(self.auth_url)
+                initial_url = self.page.url
                 check_interval = config.NAVIGATION["check_interval"]
                 max_wait_time = config.NAVIGATION["max_wait_time"]
                 start_time = time.time()
-                
+
                 buttons_to_check = [
-                    ("Кнопка закрытия", config.SELECTORS["close_button"]),
-                    ("Кнопка 'Отлично!'", config.SELECTORS["excellent_button"]),
-                    ("Кнопка 'Collect'/'Собрать'", config.SELECTORS["collect_button"]),
-                    ("Кнопка 'Skip'", config.SELECTORS["skip_button"]),
-                    ("Кнопка с кубиком", config.SELECTORS["dice_button"]),
-                    ("Кнопка 'Create city'", config.SELECTORS["create_city_button"]),
-                    ("Кнопка 'Let's start'", config.SELECTORS["lets_start_button"]),
+                    ("Close button", config.SELECTORS["close_button"]),
+                    ("Excellent button", config.SELECTORS["excellent_button"]),
+                    ("Collect button", config.SELECTORS["collect_button"]),
+                    ("Skip button", config.SELECTORS["skip_button"]),
+                    ("Dice button", config.SELECTORS["dice_button"]),
+                    ("Create city button", config.SELECTORS["create_city_button"]),
+                    ("Let's start button", config.SELECTORS["lets_start_button"]),
                 ]
-                
+
                 while time.time() - start_time < max_wait_time:
                     try:
-                        current_url = self.driver.current_url
-                        if current_url != initial_url:
-                            
-                            for button_name, selector in buttons_to_check:
-                                try:
-                                    by = By.XPATH if '//' in selector else By.CSS_SELECTOR
-                                    button = WebDriverWait(self.driver, 1).until(
-                                        EC.presence_of_element_located((by, selector))
-                                    )
-                                    touch_element(self.driver, button)
-                                    await asyncio.sleep(random.uniform(*config.RANDOM_DELAY))
-                                except TimeoutException:
-                                    pass
-                            
-                            energy_amount = self.check_energy_and_tap_coins()
-                            if energy_amount > 0:
-                                break
+                        if not self.page.is_closed():
+                            current_url = self.page.url
+                            if current_url != initial_url:
+                                for button_name, selector in buttons_to_check:
+                                    try:
+                                        button = await self.page.wait_for_selector(selector, timeout=1000)
+                                        if button:
+                                            await button.click()
+                                            await asyncio.sleep(random.uniform(*config.RANDOM_DELAY))
+                                    except Exception:
+                                        continue
+
+                                energy_amount = await self.check_energy_and_tap_coins()
+                                if energy_amount > 0:
+                                    break
+                        else:
+                            logger.warning(f"{self.account_name} | Page closed")
+                            break
+
                         await asyncio.sleep(check_interval)
-                    except WebDriverException as e:
-                        logger.error(f"{self.account_name} | Ошибка при работе с браузером: {e}")
+                    except Exception as e:
+                        logger.error(f"{self.account_name} | Error working with browser: {e}")
                         break
-                extract_game_stats(self.driver, self.account_name)
-                await asyncio.sleep(5)
-                try:
-                    _ = self.driver.title
-                except Exception:
-                    logger.error(f"{self.account_name} | Браузер бы закрыт до начала навигации о городу")
-                    return False
-                navigation_completed = await self.navigate_city()
-                
-                if navigation_completed:
-                    logger.info(f"{self.account_name} | Сессия завершена успешно")
-                    return True
-                else:
-                    logger.error(f"{self.account_name} | Ошибка при навигации по городу")
-                    return False
-            
+
+                if not self.page.is_closed():
+                    try:
+                        await self.get_game_stats()
+                    except Exception as e:
+                        logger.error(f"{self.account_name} | Error getting game stats: {e}")
+
+                    await asyncio.sleep(5)
+                    navigation_completed = await self.navigate_city()
+
+                    if navigation_completed:
+                        logger.info(f"{self.account_name} | Session ended successfully")
+                        return True
+                    else:
+                        logger.error(f"{self.account_name} | Error navigating city")
+                        return False
+
             except asyncio.CancelledError:
-                logger.warning(f"{self.account_name} | Операция была отменена")
+                logger.warning(f"{self.account_name} | Operation was cancelled")
                 return False
             except Exception as e:
-                logger.error(f"{self.account_name} | Ошибка в BrowserManager.run: {e}")
+                logger.error(f"{self.account_name} | Error in BrowserManager.run: {e}")
                 logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
-                
+
                 if attempt < max_retries - 1:
-                    logger.info(f"{self.account_name} | Повторная попытка через {retry_delay} секунд...")
+                    logger.info(f"{self.account_name} | Retrying in {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
                 else:
-                    logger.error(f"{self.account_name} | Достигнуто максимальное количество попыток. Завершение работы.")
+                    logger.error(f"{self.account_name} | Maximum number of attempts reached. Terminating.")
                     return False
-            
             finally:
-                self.quit_driver()
+                try:
+                    await self.close_browser()
+                except Exception as e:
+                    logger.error(f"{self.account_name} | Error closing browser in finally block: {e}")
 
-        return False 
-
+        return False
 
 async def play_in_browser(account_name: str, auth_url: str, proxy: Optional[str] = None) -> bool:
     browser_manager = BrowserManager(account_name, auth_url, proxy)
     result = await browser_manager.run()
-    
-    if result:
-        pass
-    else:
-        logger.error(f"{account_name} | Ошибка при работе с браузером")
-    
+
+    if not result:
+        logger.error(f"{account_name} | Error while working with browser")
+
     return result
 
 
