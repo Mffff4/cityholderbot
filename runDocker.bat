@@ -1,7 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
 
-echo Checking Docker installation...
 where docker >nul 2>nul
 if %errorlevel% neq 0 (
     echo Docker is not installed! Please install Docker Desktop first.
@@ -10,7 +9,6 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Checking if Docker service is running...
 docker info >nul 2>nul
 if %errorlevel% neq 0 (
     echo Docker service is not running! Please start Docker Desktop.
@@ -22,6 +20,11 @@ if %errorlevel% neq 0 (
 echo Docker is installed and running!
 echo.
 
+for /f "tokens=*" %%i in ('docker ps -q -f "name=cityholder"') do (
+    echo Stopping existing containers...
+    docker compose down
+)
+
 echo Checking for updates...
 git pull
 if %errorlevel% neq 0 (
@@ -31,7 +34,6 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo Checking if .env file exists...
 if not exist .env (
     if exist .env-example (
         echo Creating .env file from .env-example...
@@ -47,7 +49,6 @@ if not exist .env (
 )
 
 echo.
-echo Starting Docker containers...
 docker compose up -d --build
 
 if %errorlevel% neq 0 (
