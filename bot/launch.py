@@ -17,7 +17,7 @@ init(autoreset=True)
 from bot.bot import run_cycle
 from bot.logger.logger import logger
 from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients
-from bot.config.config import config
+from bot.config import config
 
 def clear_screen():
     if platform.system() == 'Windows':
