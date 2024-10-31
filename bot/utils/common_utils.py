@@ -24,14 +24,19 @@ def escape_html(text: Any) -> str:
 
 async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]:
     if proxy:
-        proxy_obj = Proxy.from_str(proxy)
-        proxy_dict = {
-            'scheme': proxy_obj.protocol,
-            'hostname': proxy_obj.host,
-            'port': proxy_obj.port,
-            'username': proxy_obj.login,
-            'password': proxy_obj.password,
-        }
+        try:
+            proxy_obj = Proxy.from_str(proxy)
+            proxy_dict = {
+                'scheme': proxy_obj.protocol or 'socks5',
+                'hostname': proxy_obj.host,
+                'port': proxy_obj.port,
+                'username': proxy_obj.login,
+                'password': proxy_obj.password,
+            }
+            logger.info(f"{tg_client.name} | Using proxy: {proxy_obj.host}:{proxy_obj.port}")
+        except Exception as e:
+            logger.error(f"{tg_client.name} | Error parsing proxy: {e}")
+            proxy_dict = None
     else:
         proxy_dict = None
     

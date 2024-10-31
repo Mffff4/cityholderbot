@@ -4,6 +4,7 @@ import traceback
 from typing import Optional
 import random
 from playwright.async_api import async_playwright
+from playwright.async_api import Proxy
 
 from bot.config import config
 from bot.logger.logger import logger, gradient_progress_bar
@@ -39,13 +40,26 @@ class BrowserManager:
             if config.BROWSER_CONFIG["headless"]:
                 browser_args.append("--headless=new")
 
+            proxy_config = None
             if self.proxy:
-                browser_args.append(f"--proxy-server={self.proxy}")
-                logger.info(f"{self.account_name} | Proxy set: {self.proxy}")
+                try:
+                    proxy_obj = Proxy.from_str(self.proxy)
+                    proxy_config = {
+                        "server": f"{proxy_obj.protocol or 'http'}://{proxy_obj.host}:{proxy_obj.port}",
+                    }
+                    if proxy_obj.login and proxy_obj.password:
+                        proxy_config.update({
+                            "username": proxy_obj.login,
+                            "password": proxy_obj.password,
+                        })
+                    logger.info(f"{self.account_name} | Browser using proxy: {proxy_obj.host}:{proxy_obj.port}")
+                except Exception as e:
+                    logger.error(f"{self.account_name} | Error configuring browser proxy: {e}")
 
             self.browser = await playwright.chromium.launch(
                 args=browser_args,
-                headless=config.BROWSER_CONFIG["headless"]
+                headless=config.BROWSER_CONFIG["headless"],
+                proxy=proxy_config if proxy_config else None
             )
 
             context_params = {
