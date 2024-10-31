@@ -239,22 +239,57 @@ class BrowserManager:
             await self.page.wait_for_selector('body', timeout=30000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
 
-            try:
-                understand_button = await self.page.wait_for_selector(
-                    "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Понял!')", 
-                    timeout=5000
-                )
-                if understand_button:
-                    await understand_button.evaluate("button => button.click()")
-                    await asyncio.sleep(1)
-            except Exception:
-                pass  
+            # Список всех возможных кнопок для обработки
+            buttons_to_handle = [
+                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Понял!')",
+                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Accepted!')",
+                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Got it!')",
+                "button._button_afxdk_1:text('Собрать')",
+                "button._button_afxdk_1:text('Collect')",
+                "button._button_afxdk_1:text('Skip')",
+                "button._button_afxdk_1:text('Пропустить')",
+                "button._button_afxdk_1:text('Начнем')",
+                "button._button_afxdk_1:text(\"Let's start\")",
+                "button._button_afxdk_1:text('Создать город')",
+                "button._button_afxdk_1:text('Create city')"
+            ]
 
+            # Функция для клика по кнопке с использованием JavaScript
+            async def click_button(selector):
+                try:
+                    await self.page.evaluate(f"""
+                        (selector) => {{
+                            const button = document.querySelector(selector);
+                            if (button) {{
+                                button.click();
+                                return true;
+                            }}
+                            return false;
+                        }}
+                    """, selector)
+                    await asyncio.sleep(0.5)
+                    return True
+                except Exception:
+                    return False
+
+            # Обработка всех возможных кнопок
+            for button_selector in buttons_to_handle:
+                try:
+                    button = await self.page.wait_for_selector(button_selector, timeout=2000)
+                    if button:
+                        for _ in range(3):  # Пробуем кликнуть до 3 раз
+                            if await click_button(button_selector):
+                                break
+                            await asyncio.sleep(0.5)
+                except Exception:
+                    continue
+
+            # Продолжаем с основной навигацией
             city_button_selector = f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]"
             city_button = await self.page.wait_for_selector(city_button_selector, state="visible", timeout=30000)
             
             if city_button:
-                await city_button.click()
+                await city_button.evaluate("button => button.click()")
                 await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
                 
                 try:
@@ -409,7 +444,7 @@ class BrowserManager:
                 logger.info("\t├── Level: " + stats.get('level', 'N/A'))
                 logger.info("\t├── Income: " + format_number(stats.get('income')) + "/hour")
                 logger.info("\t├── Population: " + format_number(stats.get('population')))
-                logger.info("\t└─��� Balance: " + format_number(stats.get('balance')))
+                logger.info("\t└─ Balance: " + format_number(stats.get('balance')))
                 print("")
 
             return stats
