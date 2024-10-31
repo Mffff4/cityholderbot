@@ -18,6 +18,7 @@ from bot.bot import run_cycle
 from bot.logger.logger import logger
 from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients
 from bot.config import config
+from bot.utils.session_proxy_manager import SessionProxyManager
 
 def clear_screen():
     if platform.system() == 'Windows':
@@ -80,7 +81,26 @@ async def run_tasks():
     proxies = get_proxies()
     tg_clients = await get_tg_clients()
     lock = asyncio.Lock()
-    proxies_cycle = cycle(proxies) if proxies else None
+    
+    # Инициализируем менеджер прокси
+    proxy_manager = SessionProxyManager()
+    
+    # Распределяем прокси
+    assigned_proxies = []
+    available_proxies = proxies.copy() if proxies else []
+    
+    for client in tg_clients:
+        # Проверяем, есть ли уже привязанный прокси
+        assigned_proxy = proxy_manager.get_proxy(client.name)
+        if assigned_proxy:
+            assigned_proxies.append(assigned_proxy)
+        elif available_proxies:
+            # Если нет привязанного прокси, берем новый из доступных
+            new_proxy = available_proxies.pop(0)
+            proxy_manager.assign_proxy(client.name, new_proxy)
+            assigned_proxies.append(new_proxy)
+        else:
+            assigned_proxies.append(None)
     
     try:
         for client in tg_clients:
@@ -89,7 +109,7 @@ async def run_tasks():
             if hasattr(client, '_handle_updates'):
                 client._handle_updates = lambda *args, **kwargs: None
         
-        await run_cycle(tg_clients, [next(proxies_cycle) if proxies_cycle else None for _ in tg_clients], lock)
+        await run_cycle(tg_clients, assigned_proxies, lock)
     except Exception as e:
         if not isinstance(e, (RPCError, KeyError, ValueError)):
             logger.error(f"Error during cycle execution: {e}")

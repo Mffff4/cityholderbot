@@ -53,6 +53,9 @@ async def start(tg_client: Client, proxy: str | None, lock: asyncio.Lock) -> Non
         if hasattr(tg_client, '_handle_updates'):
             tg_client._handle_updates = lambda *args, **kwargs: None
             
+        if proxy:
+            logger.info(f"{tg_client.name} | Starting with proxy")
+            
         await tg_client.start()
         
         auth_url = await getTgWebAppData(tg_client, proxy)
