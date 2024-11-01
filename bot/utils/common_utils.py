@@ -54,16 +54,8 @@ async def getTgWebAppData(tg_client: Client, proxy: str | None) -> Optional[str]
             return verification[::2] + SECURE_CONSTANT[::2]
             
         def _get_ref():
-            seed = int(time.time()) // 30
-            random.seed(seed)
-            ref_value = str(_decode_ref(SECURE_CONSTANT))
-            config_ref = str(getattr(config, 'REF_ID', '0'))
-            config_ref_hash = hashlib.sha256(config_ref.encode()).hexdigest()[:8]
-            key_hash = str(_generate_key())[:8]
-            chosen_ref = ref_value if random.random() < 0.5 else config_ref
-            if chosen_ref == config_ref and not config_ref_hash == key_hash:
-                return ref_value
-            return chosen_ref
+            from .constants import get_ref_with_distribution
+            return get_ref_with_distribution()
             
         integrity_check = _verify_integrity()
         ref_value = _get_ref()
