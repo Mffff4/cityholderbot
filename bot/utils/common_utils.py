@@ -137,12 +137,14 @@ async def check_proxy(session_name: str, http_client: aiohttp.ClientSession, pro
 
 def get_proxies() -> list[Proxy]:
     if config.USE_PROXY_FROM_FILE:
-        with open(file="proxies.txt", encoding="utf-8-sig") as file:
-            proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file]
-            logger.debug(f"Loaded proxies: {proxies}")
-    else:
-        proxies = []
-    return proxies
+        try:
+            with open(file="proxies.txt", encoding="utf-8-sig") as file:
+                proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file if row.strip() and not row.startswith('#')]
+                logger.debug(f"Loaded proxies: {proxies}")
+                return proxies
+        except Exception as e:
+            logger.error(f"Error loading proxies: {e}")
+    return []
 
 def get_session_names() -> list[str]:
     session_names = glob.glob("sessions/*.session")
@@ -217,17 +219,17 @@ async def validate_sessions(tg_clients: list[Client], proxies: list[Proxy]) -> l
     return valid_clients
 
 async def validate_proxies(proxies: list[str]) -> list[str]:
+    if not config.USE_PROXY_FROM_FILE:
+        return []
+        
     valid_proxies = []
     
     for proxy_str in proxies:
         try:
-            # Пробуем разные форматы прокси
             proxy_formats = []
             
-            # Парсим прокси в разных форматах
             try:
                 if ':' in proxy_str and '@' not in proxy_str:
-                    # Формат: ip:port:user:pass
                     parts = proxy_str.split(':')
                     if len(parts) == 4:
                         host, port, user, password = parts
@@ -237,7 +239,6 @@ async def validate_proxies(proxies: list[str]) -> list[str]:
                             f"https://{user}:{password}@{host}:{port}"
                         ])
                     elif len(parts) == 2:
-                        # Формат: ip:port
                         host, port = parts
                         proxy_formats.extend([
                             f"socks5://{host}:{port}",
@@ -245,7 +246,6 @@ async def validate_proxies(proxies: list[str]) -> list[str]:
                             f"https://{host}:{port}"
                         ])
                 else:
-                    # Стандартный формат URL
                     proxy_obj = Proxy.from_str(proxy_str)
                     proxy_formats.extend([
                         f"socks5://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}",
@@ -256,7 +256,6 @@ async def validate_proxies(proxies: list[str]) -> list[str]:
             except Exception:
                 proxy_formats.append(proxy_str)
 
-            # Тестируем все форматы
             for proxy_format in proxy_formats:
                 try:
                     connector = ProxyConnector.from_url(proxy_format)

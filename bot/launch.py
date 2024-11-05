@@ -78,39 +78,42 @@ async def process() -> None:
 
 
 async def run_tasks():
-    proxies = get_proxies()
+    proxies = get_proxies() if config.USE_PROXY_FROM_FILE else []
     tg_clients = await get_tg_clients()
     lock = asyncio.Lock()
     
-    logger.debug(f"Proxies before validation: {proxies}")
-
-    proxies = await validate_proxies(proxies)
+    if config.USE_PROXY_FROM_FILE:
+        logger.debug(f"Proxies before validation: {proxies}")
+        proxies = await validate_proxies(proxies)
+        
+        if not proxies:
+            logger.error("No valid proxies found. Exiting.")
+            return
     
-    if not proxies:
-        logger.error("No valid proxies found. Exiting.")
-        return
-
-    tg_clients = await validate_sessions(tg_clients, proxies)
+    tg_clients = await validate_sessions(tg_clients, proxies if config.USE_PROXY_FROM_FILE else [None] * len(tg_clients))
     
     if not tg_clients:
         logger.error("No valid sessions found. Exiting.")
         return
 
-    proxy_manager = SessionProxyManager()
-    
-    assigned_proxies = []
-    available_proxies = proxies.copy() if proxies else []
-    
-    for client in tg_clients:
-        assigned_proxy = proxy_manager.get_proxy(client.name)
-        if assigned_proxy:
-            assigned_proxies.append(assigned_proxy)
-        elif available_proxies:
-            new_proxy = available_proxies.pop(0)
-            proxy_manager.assign_proxy(client.name, new_proxy)
-            assigned_proxies.append(new_proxy)
-        else:
-            assigned_proxies.append(None)
+    if config.USE_PROXY_FROM_FILE:
+        proxy_manager = SessionProxyManager()
+        
+        assigned_proxies = []
+        available_proxies = proxies.copy() if proxies else []
+        
+        for client in tg_clients:
+            assigned_proxy = proxy_manager.get_proxy(client.name) if config.USE_PROXY_FROM_FILE else None
+            if assigned_proxy:
+                assigned_proxies.append(assigned_proxy)
+            elif available_proxies and config.USE_PROXY_FROM_FILE:
+                new_proxy = available_proxies.pop(0)
+                proxy_manager.assign_proxy(client.name, new_proxy)
+                assigned_proxies.append(new_proxy)
+            else:
+                assigned_proxies.append(None)
+    else:
+        assigned_proxies = [None] * len(tg_clients)
     
     try:
         for client in tg_clients:
