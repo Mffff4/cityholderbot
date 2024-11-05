@@ -5,6 +5,7 @@ from typing import Optional
 import random
 from playwright.async_api import async_playwright
 from better_proxy import Proxy
+import aiohttp
 
 from bot.config import config
 from bot.logger.logger import logger, gradient_progress_bar
@@ -33,65 +34,68 @@ class BrowserManager:
                 "--disable-gpu",
                 f"--window-size={window_width},{window_height}",
                 "--lang=" + config.BROWSER_CONFIG["language"],
-                "--verbose",
-                "--log-level=0"
             ]
 
             if config.BROWSER_CONFIG["headless"]:
                 browser_args.append("--headless=new")
 
-            proxy_config = None
-            if self.proxy:
-                try:
-                    proxy_obj = Proxy.from_str(self.proxy)
-                    proxy_config = {
-                        "server": f"{proxy_obj.protocol or 'http'}://{proxy_obj.host}:{proxy_obj.port}",
-                    }
-                    if proxy_obj.login and proxy_obj.password:
-                        proxy_config.update({
-                            "username": proxy_obj.login,
-                            "password": proxy_obj.password,
-                        })
-                    logger.info(f"{self.account_name} | Browser using proxy: {proxy_obj.host}:{proxy_obj.port}")
-                except Exception as e:
-                    logger.error(f"{self.account_name} | Error configuring browser proxy: {e}")
-
-            self.browser = await playwright.chromium.launch(
-                args=browser_args,
-                headless=config.BROWSER_CONFIG["headless"],
-                proxy=proxy_config if proxy_config else None
-            )
-
-            context_params = {
-                "viewport": {"width": window_width, "height": window_height},
-                "user_agent": mobile_user_agent,
-                "device_scale_factor": 3,
-                "is_mobile": True,
-                "has_touch": True
-            }
-
-            self.context = await self.browser.new_context(**context_params)
-            self.page = await self.context.new_page()
-
-            await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
-
-            script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
-            page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
-
-            self.page.set_default_timeout(page_load_timeout * 1000)
-            self.page.set_default_navigation_timeout(script_timeout * 1000)
-
-            logger.info(f"{self.account_name} | Browser created successfully. Timeouts: {script_timeout}s/{page_load_timeout}s")
-
             try:
-                logger.info(f"{self.account_name} | Loading auth page...")
-                await self.page.goto(self.auth_url)
-                logger.info(f"{self.account_name} | Auth page loaded successfully")
-            except Exception as e:
-                logger.error(f"{self.account_name} | Error loading page: {e}")
-                raise
+                proxy_obj = Proxy.from_str(self.proxy)
+                
+                proxy_config = {
+                    "server": f"{proxy_obj.host}:{proxy_obj.port}",
+                    "username": proxy_obj.login,
+                    "password": proxy_obj.password
+                }
+                
+                browser_args.extend([
+                    f"--proxy-server={proxy_obj.host}:{proxy_obj.port}",
+                    "--disable-web-security",
+                    "--ignore-certificate-errors",
+                ])
 
-            return self.page
+                self.browser = await playwright.chromium.launch(
+                    args=browser_args,
+                    headless=config.BROWSER_CONFIG["headless"],
+                    proxy=proxy_config,
+                    ignore_default_args=["--enable-automation"],
+                )
+
+                context_params = {
+                    "viewport": {"width": window_width, "height": window_height},
+                    "user_agent": mobile_user_agent,
+                    "device_scale_factor": 3,
+                    "is_mobile": True,
+                    "has_touch": True,
+                    "ignore_https_errors": True,
+                }
+
+                self.context = await self.browser.new_context(**context_params)
+                self.page = await self.context.new_page()
+                await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
+
+                script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
+                page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
+
+                self.page.set_default_timeout(page_load_timeout * 1000)
+                self.page.set_default_navigation_timeout(script_timeout * 1000)
+
+                logger.info(f"{self.account_name} | Browser created successfully")
+                
+                await self.page.evaluate("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                """)
+
+                await self.page.goto(self.auth_url, timeout=60000, wait_until="networkidle")
+                return self.page
+
+            except Exception as e:
+                logger.error(f"{self.account_name} | Error launching browser: {e}")
+                if hasattr(self, 'browser') and self.browser:
+                    await self.browser.close()
+                raise
 
         except Exception as e:
             logger.error(f"{self.account_name} | Error creating browser: {e}")
@@ -250,10 +254,9 @@ class BrowserManager:
 
     async def navigate_city(self):
         try:
-            await self.page.wait_for_selector('body', timeout=30000)
+            await self.page.wait_for_selector('body', timeout=60000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
 
-            # Список всех возможных кнопок для обработки
             buttons_to_handle = [
                 "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Понял!')",
                 "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Accepted!')",
@@ -268,46 +271,58 @@ class BrowserManager:
                 "button._button_afxdk_1:text('Create city')"
             ]
 
-            # Функция для клика по кнопке с использованием JavaScript
             async def click_button(selector):
                 try:
-                    await self.page.evaluate(f"""
-                        (selector) => {{
-                            const button = document.querySelector(selector);
-                            if (button) {{
-                                button.click();
-                                return true;
-                            }}
-                            return false;
+                    button_exists = await self.page.evaluate(f"""
+                        () => {{
+                            const button = document.querySelector('{selector}');
+                            return button !== null;
                         }}
-                    """, selector)
-                    await asyncio.sleep(0.5)
-                    return True
+                    """)
+                    
+                    if button_exists:
+                        await self.page.click(selector)
+                        await asyncio.sleep(1)
+                        return True
+                    return False
                 except Exception:
                     return False
 
-            # Обработка всех возможных кнопок
             for button_selector in buttons_to_handle:
                 try:
-                    button = await self.page.wait_for_selector(button_selector, timeout=2000)
-                    if button:
-                        for _ in range(3):  # Пробуем кликнуть до 3 раз
-                            if await click_button(button_selector):
-                                break
-                            await asyncio.sleep(0.5)
+                    await click_button(button_selector)
                 except Exception:
                     continue
 
-            # Продолжаем с основной навигацией
-            city_button_selector = f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]"
-            city_button = await self.page.wait_for_selector(city_button_selector, state="visible", timeout=30000)
-            
-            if city_button:
-                await city_button.evaluate("button => button.click()")
-                await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
-                
+            city_selectors = [
+                f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]",
+                "a[href='/city']",
+                "//a[contains(@href, '/city')]",
+                "._btnCityWrapper_"
+            ]
+
+            city_button = None
+            for selector in city_selectors:
                 try:
+                    city_button = await self.page.wait_for_selector(selector, state="visible", timeout=5000)
+                    if city_button:
+                        logger.info(f"{self.account_name} | Found city button using selector: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if city_button:
+                try:
+                    await city_button.click()
+                    await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
+                    
                     await self.page.wait_for_load_state('networkidle', timeout=30000)
+                    
+                    current_url = self.page.url
+                    if '/city' not in current_url:
+                        logger.warning(f"{self.account_name} | Navigation to city page failed. Current URL: {current_url}")
+                        return False
+
                     await self.find_and_click_build_button()
                     upgrades_available = await self.upgrade_city()
 
@@ -317,10 +332,11 @@ class BrowserManager:
 
                     return True
                 except Exception as e:
-                    logger.error(f"{self.account_name} | Error waiting for page load: {e}")
+                    logger.error(f"{self.account_name} | Error after clicking city button: {e}")
                     return False
-
-            return False
+            else:
+                logger.error(f"{self.account_name} | City button not found using any selector")
+                return False
 
         except asyncio.CancelledError:
             logger.warning(f"{self.account_name} | Navigation cancelled")
@@ -555,6 +571,33 @@ class BrowserManager:
 
         return False
 
+    async def test_proxy_connection(self):
+        try:
+            proxy_obj = Proxy.from_str(self.proxy)
+            conn = aiohttp.TCPConnector(ssl=False)
+            timeout = aiohttp.ClientTimeout(total=30)
+            
+            async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+                try:
+                    proxy_url = f"socks5://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}"
+                    async with session.get('http://example.com', proxy=proxy_url) as response:
+                        if response.status == 200:
+                            logger.info(f"{self.account_name} | Proxy connection test successful")
+                            return True
+                except Exception as e:
+                    try:
+                        proxy_url = f"http://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}"
+                        async with session.get('http://example.com', proxy=proxy_url) as response:
+                            if response.status == 200:
+                                logger.info(f"{self.account_name} | Proxy connection test successful (HTTP)")
+                                self.proxy = f"http://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}"
+                                return True
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"{self.account_name} | Proxy connection test failed: {e}")
+        return False
+
 async def play_in_browser(account_name: str, auth_url: str, proxy: Optional[str] = None) -> bool:
     browser_manager = BrowserManager(account_name, auth_url, proxy)
     result = await browser_manager.run()
@@ -563,6 +606,3 @@ async def play_in_browser(account_name: str, auth_url: str, proxy: Optional[str]
         logger.error(f"{account_name} | Error while working with browser")
 
     return result
-
-
-

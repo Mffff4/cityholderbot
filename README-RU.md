@@ -226,19 +226,13 @@ City Holder Bot — это автоматизированный бот для и
 1. Создайте файл `proxies.txt` в корневой директории проекта
 2. Добавьте прокси в любом из следующих форматов:
    ```
-   protocol://username:password@host:port
-   username:password@host:port
-   host:port:username:password
-   host:port
+   socks5://login:password@127.0.0.1:1080
+   socks5://user:pass@192.168.1.1:8080
+
+   http://login:password@127.0.0.1:8080
+   http://user:pass@192.168.1.1:3128
    ```
    
-   Примеры:
-   ```
-   socks5://user:pass@1.2.3.4:1234
-   http://admin:12345@proxy.example.com:8080
-   1.2.3.4:1234:user:pass
-   5.6.7.8:8080
-   ```
 
 3. В файле `.env` установите параметр:
    ```

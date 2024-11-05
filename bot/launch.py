@@ -16,7 +16,7 @@ init(autoreset=True)
 
 from bot.bot import run_cycle
 from bot.logger.logger import logger
-from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients
+from bot.utils.common_utils import get_session_names, get_proxies, register_sessions, get_tg_clients, validate_sessions, validate_proxies
 from bot.config import config
 from bot.utils.session_proxy_manager import SessionProxyManager
 
@@ -82,20 +82,30 @@ async def run_tasks():
     tg_clients = await get_tg_clients()
     lock = asyncio.Lock()
     
-    # Инициализируем менеджер прокси
+    logger.debug(f"Proxies before validation: {proxies}")
+
+    proxies = await validate_proxies(proxies)
+    
+    if not proxies:
+        logger.error("No valid proxies found. Exiting.")
+        return
+
+    tg_clients = await validate_sessions(tg_clients, proxies)
+    
+    if not tg_clients:
+        logger.error("No valid sessions found. Exiting.")
+        return
+
     proxy_manager = SessionProxyManager()
     
-    # Распределяем прокси
     assigned_proxies = []
     available_proxies = proxies.copy() if proxies else []
     
     for client in tg_clients:
-        # Проверяем, есть ли уже привязанный прокси
         assigned_proxy = proxy_manager.get_proxy(client.name)
         if assigned_proxy:
             assigned_proxies.append(assigned_proxy)
         elif available_proxies:
-            # Если нет привязанного прокси, берем новый из доступных
             new_proxy = available_proxies.pop(0)
             proxy_manager.assign_proxy(client.name, new_proxy)
             assigned_proxies.append(new_proxy)

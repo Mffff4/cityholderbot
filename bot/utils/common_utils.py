@@ -17,6 +17,8 @@ import hashlib
 from bot import InvalidSession
 from bot.config import config
 from bot.logger.logger import logger
+from playwright.async_api import async_playwright
+from aiohttp_socks import ProxyConnector
 
 def escape_html(text: Any) -> str:
     text = str(text)
@@ -137,6 +139,7 @@ def get_proxies() -> list[Proxy]:
     if config.USE_PROXY_FROM_FILE:
         with open(file="proxies.txt", encoding="utf-8-sig") as file:
             proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file]
+            logger.debug(f"Loaded proxies: {proxies}")
     else:
         proxies = []
     return proxies
@@ -199,3 +202,82 @@ async def async_random_delay(delay: List[float] = config.RANDOM_DELAY) -> float:
     delay_time = random_delay(delay)
     await asyncio.sleep(delay_time)
     return delay_time
+
+async def validate_sessions(tg_clients: list[Client], proxies: list[Proxy]) -> list[Client]:
+    valid_clients = []
+    for tg_client, proxy in zip(tg_clients, proxies):
+        try:
+            await tg_client.start()
+            logger.info(f"{tg_client.name} | Session is valid")
+            valid_clients.append(tg_client)
+        except Exception as e:
+            logger.error(f"{tg_client.name} | Invalid session: {e}")
+        finally:
+            await tg_client.stop()
+    return valid_clients
+
+async def validate_proxies(proxies: list[str]) -> list[str]:
+    valid_proxies = []
+    
+    for proxy_str in proxies:
+        try:
+            # Пробуем разные форматы прокси
+            proxy_formats = []
+            
+            # Парсим прокси в разных форматах
+            try:
+                if ':' in proxy_str and '@' not in proxy_str:
+                    # Формат: ip:port:user:pass
+                    parts = proxy_str.split(':')
+                    if len(parts) == 4:
+                        host, port, user, password = parts
+                        proxy_formats.extend([
+                            f"socks5://{user}:{password}@{host}:{port}",
+                            f"http://{user}:{password}@{host}:{port}",
+                            f"https://{user}:{password}@{host}:{port}"
+                        ])
+                    elif len(parts) == 2:
+                        # Формат: ip:port
+                        host, port = parts
+                        proxy_formats.extend([
+                            f"socks5://{host}:{port}",
+                            f"http://{host}:{port}",
+                            f"https://{host}:{port}"
+                        ])
+                else:
+                    # Стандартный формат URL
+                    proxy_obj = Proxy.from_str(proxy_str)
+                    proxy_formats.extend([
+                        f"socks5://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}",
+                        f"socks5h://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}",
+                        f"http://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}",
+                        f"https://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}"
+                    ])
+            except Exception:
+                proxy_formats.append(proxy_str)
+
+            # Тестируем все форматы
+            for proxy_format in proxy_formats:
+                try:
+                    connector = ProxyConnector.from_url(proxy_format)
+                    timeout = aiohttp.ClientTimeout(total=10)
+                    
+                    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+                        async with session.get('http://example.com') as response:
+                            if response.status == 200:
+                                logger.info(f"Proxy valid with format: {proxy_format}")
+                                valid_proxies.append(proxy_format)
+                                break
+                except Exception as e:
+                    logger.debug(f"Format {proxy_format} failed: {str(e)}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Error testing proxy {proxy_str}: {e}")
+            
+    if not valid_proxies:
+        logger.warning("No valid proxies found!")
+    else:
+        logger.info(f"Found {len(valid_proxies)} valid proxies")
+        
+    return valid_proxies
