@@ -136,15 +136,25 @@ async def check_proxy(session_name: str, http_client: aiohttp.ClientSession, pro
         logger.error(f"{session_name} | Proxy: {proxy} | Error: {escape_html(error)}")
 
 def get_proxies() -> list[Proxy]:
-    if config.USE_PROXY_FROM_FILE:
-        try:
-            with open(file="proxies.txt", encoding="utf-8-sig") as file:
-                proxies = [Proxy.from_str(proxy=row.strip()).as_url for row in file if row.strip() and not row.startswith('#')]
-                logger.debug(f"Loaded proxies: {proxies}")
-                return proxies
-        except Exception as e:
-            logger.error(f"Error loading proxies: {e}")
-    return []
+    if not config.USE_PROXY_FROM_FILE:
+        return []
+        
+    try:
+        with open(file="proxies.txt", encoding="utf-8-sig") as file:
+            proxies = []
+            for row in file:
+                row = row.strip()
+                if row and not row.startswith('#'):
+                    try:
+                        proxy = Proxy.from_str(row).as_url
+                        proxies.append(proxy)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse proxy: {row}, Error: {e}")
+            logger.debug(f"Loaded proxies: {proxies}")
+            return proxies
+    except Exception as e:
+        logger.error(f"Error loading proxies: {e}")
+        return []
 
 def get_session_names() -> list[str]:
     session_names = glob.glob("sessions/*.session")

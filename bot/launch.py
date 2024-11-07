@@ -78,35 +78,36 @@ async def process() -> None:
 
 
 async def run_tasks():
-    proxies = get_proxies() if config.USE_PROXY_FROM_FILE else []
     tg_clients = await get_tg_clients()
     lock = asyncio.Lock()
     
     if config.USE_PROXY_FROM_FILE:
+        proxies = get_proxies()
         logger.debug(f"Proxies before validation: {proxies}")
         proxies = await validate_proxies(proxies)
         
         if not proxies:
-            logger.error("No valid proxies found. Exiting.")
-            return
+            logger.warning("No valid proxies found, continuing without proxies")
+            proxies = [None] * len(tg_clients)
+    else:
+        proxies = [None] * len(tg_clients)
     
-    tg_clients = await validate_sessions(tg_clients, proxies if config.USE_PROXY_FROM_FILE else [None] * len(tg_clients))
+    tg_clients = await validate_sessions(tg_clients, proxies)
     
     if not tg_clients:
         logger.error("No valid sessions found. Exiting.")
         return
 
-    if config.USE_PROXY_FROM_FILE:
+    if config.USE_PROXY_FROM_FILE and any(proxies):
         proxy_manager = SessionProxyManager()
-        
         assigned_proxies = []
-        available_proxies = proxies.copy() if proxies else []
+        available_proxies = [p for p in proxies if p is not None]
         
         for client in tg_clients:
-            assigned_proxy = proxy_manager.get_proxy(client.name) if config.USE_PROXY_FROM_FILE else None
+            assigned_proxy = proxy_manager.get_proxy(client.name)
             if assigned_proxy:
                 assigned_proxies.append(assigned_proxy)
-            elif available_proxies and config.USE_PROXY_FROM_FILE:
+            elif available_proxies:
                 new_proxy = available_proxies.pop(0)
                 proxy_manager.assign_proxy(client.name, new_proxy)
                 assigned_proxies.append(new_proxy)

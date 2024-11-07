@@ -39,72 +39,65 @@ class BrowserManager:
             if config.BROWSER_CONFIG["headless"]:
                 browser_args.append("--headless=new")
 
-            proxy_config = None
+            launch_options = {
+                "args": browser_args,
+                "headless": config.BROWSER_CONFIG["headless"],
+                "ignore_default_args": ["--enable-automation"],
+            }
+
             if config.USE_PROXY_FROM_FILE and self.proxy:
                 try:
                     proxy_obj = Proxy.from_str(self.proxy)
-                    
                     proxy_config = {
                         "server": f"{proxy_obj.host}:{proxy_obj.port}",
                         "username": proxy_obj.login,
                         "password": proxy_obj.password
                     }
-                    
+                    launch_options["proxy"] = proxy_config
                     browser_args.extend([
                         f"--proxy-server={proxy_obj.host}:{proxy_obj.port}",
                         "--disable-web-security",
                         "--ignore-certificate-errors",
                     ])
                 except Exception as e:
-                    logger.error(f"{self.account_name} | Error configuring proxy: {e}")
+                    logger.warning(f"{self.account_name} | Skipping proxy configuration: {e}")
 
-            try:
-                self.browser = await playwright.chromium.launch(
-                    args=browser_args,
-                    headless=config.BROWSER_CONFIG["headless"],
-                    proxy=proxy_config,
-                    ignore_default_args=["--enable-automation"],
-                )
+            self.browser = await playwright.chromium.launch(**launch_options)
 
-                context_params = {
-                    "viewport": {"width": window_width, "height": window_height},
-                    "user_agent": mobile_user_agent,
-                    "device_scale_factor": 3,
-                    "is_mobile": True,
-                    "has_touch": True,
-                    "ignore_https_errors": True,
-                }
+            context_params = {
+                "viewport": {"width": window_width, "height": window_height},
+                "user_agent": mobile_user_agent,
+                "device_scale_factor": 3,
+                "is_mobile": True,
+                "has_touch": True,
+                "ignore_https_errors": True,
+            }
 
-                self.context = await self.browser.new_context(**context_params)
-                self.page = await self.context.new_page()
-                await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
+            self.context = await self.browser.new_context(**context_params)
+            self.page = await self.context.new_page()
+            await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
 
-                script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
-                page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
+            script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
+            page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
 
-                self.page.set_default_timeout(page_load_timeout * 1000)
-                self.page.set_default_navigation_timeout(script_timeout * 1000)
+            self.page.set_default_timeout(page_load_timeout * 1000)
+            self.page.set_default_navigation_timeout(script_timeout * 1000)
 
-                logger.info(f"{self.account_name} | Browser created successfully")
-                
-                await self.page.evaluate("""
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                """)
+            logger.info(f"{self.account_name} | Browser created successfully")
+            
+            await self.page.evaluate("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
 
-                await self.page.goto(self.auth_url, timeout=60000, wait_until="networkidle")
-                return self.page
-
-            except Exception as e:
-                logger.error(f"{self.account_name} | Error launching browser: {e}")
-                if hasattr(self, 'browser') and self.browser:
-                    await self.browser.close()
-                raise
+            await self.page.goto(self.auth_url, timeout=60000, wait_until="networkidle")
+            return self.page
 
         except Exception as e:
-            logger.error(f"{self.account_name} | Error creating browser: {e}")
-            logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
+            logger.error(f"{self.account_name} | Error launching browser: {e}")
+            if hasattr(self, 'browser') and self.browser:
+                await self.browser.close()
             raise
 
     async def close_browser(self):
@@ -262,86 +255,80 @@ class BrowserManager:
             await self.page.wait_for_selector('body', timeout=60000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
 
-            buttons_to_handle = [
-                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Понял!')",
-                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Accepted!')",
-                "button._button_afxdk_1._primary_afxdk_25._normal_afxdk_194:text('Got it!')",
-                "button._button_afxdk_1:text('Собрать')",
-                "button._button_afxdk_1:text('Collect')",
-                "button._button_afxdk_1:text('Skip')",
-                "button._button_afxdk_1:text('Пропустить')",
-                "button._button_afxdk_1:text('Начнем')",
-                "button._button_afxdk_1:text(\"Let's start\")",
-                "button._button_afxdk_1:text('Создать город')",
-                "button._button_afxdk_1:text('Create city')"
-            ]
-
-            async def click_button(selector):
-                try:
-                    button_exists = await self.page.evaluate(f"""
-                        () => {{
-                            const button = document.querySelector('{selector}');
-                            return button !== null;
-                        }}
-                    """)
-                    
-                    if button_exists:
-                        await self.page.click(selector)
-                        await asyncio.sleep(1)
-                        return True
-                    return False
-                except Exception:
-                    return False
-
-            for button_selector in buttons_to_handle:
-                try:
-                    await click_button(button_selector)
-                except Exception:
-                    continue
+            try:
+                excellent_button = await self.page.wait_for_selector(
+                    "button._button_1ir11_1._primary_1ir11_25._normal_1ir11_211:text('Отлично!')", 
+                    timeout=5000
+                )
+                if excellent_button:
+                    try:
+                        await self.page.evaluate("""(element) => {
+                            element.click();
+                            element.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            }));
+                        }""", excellent_button)
+                    except Exception:
+                        try:
+                            await excellent_button.click(force=True)
+                        except Exception:
+                            box = await excellent_button.bounding_box()
+                            if box:
+                                await self.page.mouse.click(
+                                    box["x"] + box["width"] / 2,
+                                    box["y"] + box["height"] / 2
+                                )
+                    await asyncio.sleep(2)
+            except Exception as e:
+                logger.debug(f"{self.account_name} | No excellent button found: {e}")
 
             city_selectors = [
-                f"//a[contains(@class, '_button_') and @href='/city']//div[contains(@class, '_title_') and (text()='{config.BUTTON_TEXTS['city']['ru']}' or text()='{config.BUTTON_TEXTS['city']['en']}')]",
-                "a[href='/city']",
-                "//a[contains(@href, '/city')]",
-                "._btnCityWrapper_"
+                "a._button_1rcrc_1._big_1rcrc_52[href='/city']",
+                "div._title_1rcrc_32:text('Ваш город')",
+                "//a[contains(@class, '_button_') and @href='/city']",
+                "//div[contains(@class, '_title_') and text()='Ваш город']"
             ]
 
-            city_button = None
             for selector in city_selectors:
                 try:
-                    city_button = await self.page.wait_for_selector(selector, state="visible", timeout=5000)
+                    city_button = await self.page.wait_for_selector(selector, state="visible", timeout=10000)
                     if city_button:
-                        logger.info(f"{self.account_name} | Found city button using selector: {selector}")
-                        break
-                except Exception:
+                        logger.info(f"{self.account_name} | Found city button")
+                        
+                        await city_button.scroll_into_view_if_needed()
+                        await asyncio.sleep(1)
+                        
+                        await self.page.evaluate("""(element) => {
+                            element.click();
+                            element.dispatchEvent(new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            }));
+                        }""", city_button)
+                        
+                        await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
+                        
+                        if '/city' in self.page.url:
+                            logger.info(f"{self.account_name} | Successfully navigated to city page")
+                            
+                            build_button = await self.page.wait_for_selector("div._btnBuild_xw841_23", timeout=5000)
+                            if build_button:
+                                await build_button.click()
+                                await asyncio.sleep(random.uniform(*config.BUILD_BUTTON_CLICK_DELAY))
+                            break
+                except Exception as e:
+                    logger.debug(f"{self.account_name} | Failed with selector {selector}: {e}")
                     continue
 
-            if city_button:
-                try:
-                    await city_button.click()
-                    await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
-                    
-                    await self.page.wait_for_load_state('networkidle', timeout=30000)
-                    
-                    current_url = self.page.url
-                    if '/city' not in current_url:
-                        logger.warning(f"{self.account_name} | Navigation to city page failed. Current URL: {current_url}")
-                        return False
+            upgrades_available = await self.upgrade_city()
+            if not upgrades_available:
+                logger.info(f"{self.account_name} | No upgrades available")
+                return True
 
-                    await self.find_and_click_build_button()
-                    upgrades_available = await self.upgrade_city()
-
-                    if not upgrades_available:
-                        logger.info(f"{self.account_name} | No upgrades available.")
-                        return True
-
-                    return True
-                except Exception as e:
-                    logger.error(f"{self.account_name} | Error after clicking city button: {e}")
-                    return False
-            else:
-                logger.error(f"{self.account_name} | City button not found using any selector")
-                return False
+            return True
 
         except asyncio.CancelledError:
             logger.warning(f"{self.account_name} | Navigation cancelled")
