@@ -153,11 +153,6 @@ class BrowserManager:
                         break;
                     }}
 
-                    if (Date.now() - lastChangeTime > noChangeTimeout) {{
-                        console.log("No changes for 30 seconds, finishing upgrade");
-                        break;
-                    }}
-
                     let clickAttempts = 0;
                     const maxClickAttempts = 3;
                     
@@ -186,10 +181,6 @@ class BrowserManager:
 
                     for (let item of items) {{
                         if (Date.now() - startTime > maxExecutionTime) {{
-                            break;
-                        }}
-
-                        if (Date.now() - lastChangeTime > noChangeTimeout) {{
                             break;
                         }}
 
