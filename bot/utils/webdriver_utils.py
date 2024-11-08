@@ -126,9 +126,25 @@ class BrowserManager:
         try:
             logger.info(f"{self.account_name} | Starting city upgrade")
             
+            # Ждем загрузки основных элементов
+            await self.page.wait_for_selector('[class^="_buildNav"]', timeout=10000)
+            
             upgrade_result = await self.page.evaluate(f"""
             async () => {{
                 const sleep = ms => new Promise(r => setTimeout(r, ms));
+                
+                // Вспомогательная функция для безопасного клика
+                const safeClick = async (element) => {{
+                    if (!element) return false;
+                    try {{
+                        element.click();
+                        return true;
+                    }} catch (e) {{
+                        console.error('Click failed:', e);
+                        return false;
+                    }}
+                }};
+                
                 let missingButtons = [];
                 let upgradedCount = 0;
                 let noUpgradesAvailable = true;
@@ -138,8 +154,20 @@ class BrowserManager:
                 const noChangeTimeout = {config.SCRIPT_UPGRADE['no_change_timeout']};
                 let lastChangeTime = startTime;
 
-                let tabs = Array.from(document.querySelectorAll('[class^="_buildNav"] [class^="_navItem"]'))
+                // Находим и проверяем вкладки
+                const navElement = document.querySelector('[class^="_buildNav"]');
+                if (!navElement) {{
+                    console.log("Navigation element not found");
+                    return {{ error: "Navigation not found" }};
+                }}
+                
+                let tabs = Array.from(navElement.querySelectorAll('[class^="_navItem"]'))
                     .filter(item => item.querySelector('[class^="_count"]'));
+                
+                if (!tabs.length) {{
+                    console.log("No tabs found");
+                    return {{ error: "No tabs found" }};
+                }}
                 
                 const reorderedTabs = [
                     ...tabs.slice(1, 4),
@@ -148,6 +176,8 @@ class BrowserManager:
                 ];
 
                 for (let t of reorderedTabs) {{
+                    if (!t) continue;  // Пропускаем undefined элементы
+                    
                     if (Date.now() - startTime > maxExecutionTime) {{
                         console.log("Maximum execution time exceeded");
                         break;
@@ -157,7 +187,13 @@ class BrowserManager:
                     const maxClickAttempts = 3;
                     
                     while (clickAttempts < maxClickAttempts) {{
-                        t.click();
+                        if (!await safeClick(t)) {{
+                            console.log("Tab click failed");
+                            clickAttempts++;
+                            await sleep(200);
+                            continue;
+                        }}
+                        
                         await sleep(500);
                         
                         if (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true') {{
@@ -171,30 +207,34 @@ class BrowserManager:
                     await sleep({config.SCRIPT_UPGRADE['click_delay']});
 
                     let items = Array.from(document.querySelectorAll('[class^="_buildPreview"]'))
-                        .filter(item => !item.classList.contains('disabled') && 
-                                    !item.querySelector('[class^="_cooldown"]') &&
-                                    !item.querySelector('button[disabled]'));
+                        .filter(item => item && 
+                                      !item.classList.contains('disabled') && 
+                                      !item.querySelector('[class^="_cooldown"]') &&
+                                      !item.querySelector('button[disabled]'));
 
                     if (items.length > 0) {{
                         noUpgradesAvailable = false;
                     }}
 
                     for (let item of items) {{
+                        if (!item) continue;  // Пропускаем undefined элементы
+                        
                         if (Date.now() - startTime > maxExecutionTime) {{
                             break;
                         }}
 
                         let button = item.querySelector('button');
                         if (button) {{
-                            button.click();
-                            upgradedCount++;
-                            lastChangeTime = Date.now();
-                            await sleep({config.SCRIPT_UPGRADE['post_click_delay']});
+                            if (await safeClick(button)) {{
+                                upgradedCount++;
+                                lastChangeTime = Date.now();
+                                await sleep({config.SCRIPT_UPGRADE['post_click_delay']});
 
-                            let detailButton = document.querySelector('[class^="_buildDetail"] button');
-                            if (detailButton) {{
-                                detailButton.click();
-                                await sleep(1000);
+                                let detailButton = document.querySelector('[class^="_buildDetail"] button');
+                                if (detailButton) {{
+                                    await safeClick(detailButton);
+                                    await sleep(1000);
+                                }}
                             }}
                         }} else {{
                             missingButtons.push(item.outerHTML);
@@ -212,6 +252,10 @@ class BrowserManager:
                 }};
             }}
             """)
+
+            if 'error' in upgrade_result:
+                logger.error(f"{self.account_name} | Upgrade error: {upgrade_result['error']}")
+                return False
 
             logger.info(f"{self.account_name} | Upgrades completed: {upgrade_result['upgradedCount']}")
             if upgrade_result['missingButtons']:
