@@ -28,6 +28,22 @@ def is_browser_installed_linux():
     except Exception:
         return False
 
+def is_browser_installed_windows():
+    try:
+        user_home = os.path.expanduser('~')
+        browser_path = Path(user_home) / 'AppData' / 'Local' / 'ms-playwright'
+        if not browser_path.exists():
+            return False
+        
+        chromium_dirs = list(browser_path.glob('chromium-*'))
+        if not chromium_dirs:
+            return False
+            
+        chrome_exe = chromium_dirs[0] / 'chrome.exe'
+        return chrome_exe.exists()
+    except Exception:
+        return False
+
 def setup_browser():
     if is_docker():
         logger.info("Docker environment detected, skipping browser check")
@@ -91,7 +107,7 @@ def setup_browser():
         if platform.system() == 'Windows':
             logger.info("Windows detected, checking installation...")
             
-            if is_browser_installed():
+            if is_browser_installed_windows():
                 logger.info("Chromium browser already installed, skipping installation")
             else:
                 logger.info("Installing dependencies...")
