@@ -41,7 +41,7 @@ def setup_browser():
                 logger.info("Installing dependencies...")
                 
                 try:
-                    logger.info("Installing MS Visual C++ runtime...")
+                    logger.info("Installing MS Visual C++ runtime and Playwright dependencies...")
                     subprocess.run([sys.executable, '-m', 'playwright', 'install-deps'], 
                                  check=True, 
                                  capture_output=True)
