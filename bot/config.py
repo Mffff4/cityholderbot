@@ -47,20 +47,14 @@ class Config(BaseSettings):
     }
 
     SELECTORS: Dict[str, str] = {
-        "close_button": "div._closeButton_1lie3_16",
-        "excellent_button": "//button[contains(@class, '_button_afxdk_1') and contains(@class, '_primary_afxdk_25') and contains(@class, '_normal_afxdk_194') and (text()='Отлично!' or text()='Excellent!')]",
-        "collect_button": "//button[contains(@class, '_button_afxdk_1') and (contains(text(), 'Collect') or contains(text(), 'Собрать'))]",
-        "skip_button": "//button[contains(@class, '_button_afxdk_1') and (text()='Skip' or text()='Пропустить')]",
-        "dice_button": "//button[contains(@class, '_diceBtn_bm9n3_93')]",
-        "create_city_button": "//button[contains(@class, '_button_afxdk_1') and contains(@class, '_primary_afxdk_25') and contains(@class, '_normal_afxdk_194') and (text()='Create city' or text()='Создать город')]",
-        "lets_start_button": "//button[contains(@class, '_button_afxdk_1') and contains(@class, '_primary_afxdk_25') and contains(@class, '_normal_afxdk_194') and (text()=\"Let's start\" or text()='Начнем')]",
-        "energy_element": "energy",
-        "coin": "div[class*='_coin_']",
-        "build_button": "a._btnBuildWrapper_xw841_23[href='/city/build']",
-        "level": "div[class*='_title_14n1y_']",
-        "income": "#income ._info_ji1yj_18",
-        "population": "#population ._info_ji1yj_18", 
-        "balance": "div[class*='_money_']"
+        "close_button": "div[class*='_closeButton_']",
+        "excellent_button": "button:has-text('Отлично!')",
+        "collect_button": "button:has-text('Забрать')",
+        "skip_button": "button:has-text('Пропустить')",
+        "dice_button": "button[class*='_dice_']",
+        "create_city_button": "button:has-text('Создать город')",
+        "lets_start_button": "button:has-text('Начнем!')",
+        "energy_element": "energy"
     }
 
     BROWSER_CONFIG: Dict[str, Any] = {

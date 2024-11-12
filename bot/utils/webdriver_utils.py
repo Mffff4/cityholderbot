@@ -6,7 +6,6 @@ import random
 from playwright.async_api import async_playwright
 from better_proxy import Proxy
 import aiohttp
-
 from bot.config import config
 from bot.logger.logger import logger, gradient_progress_bar
 import math
@@ -23,10 +22,8 @@ class BrowserManager:
     async def create_browser(self):
         try:
             playwright = await async_playwright().start()
-            
             window_width, window_height = config.BROWSER_CONFIG["window_size"]
             mobile_user_agent = config.BROWSER_CONFIG["mobile_user_agent"]
-
             browser_args = [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
@@ -35,16 +32,13 @@ class BrowserManager:
                 f"--window-size={window_width},{window_height}",
                 "--lang=" + config.BROWSER_CONFIG["language"],
             ]
-
             if config.BROWSER_CONFIG["headless"]:
                 browser_args.append("--headless=new")
-
             launch_options = {
                 "args": browser_args,
                 "headless": config.BROWSER_CONFIG["headless"],
                 "ignore_default_args": ["--enable-automation"],
             }
-
             if config.USE_PROXY_FROM_FILE and self.proxy:
                 try:
                     proxy_obj = Proxy.from_str(self.proxy)
@@ -61,9 +55,7 @@ class BrowserManager:
                     ])
                 except Exception as e:
                     logger.warning(f"{self.account_name} | Skipping proxy configuration: {e}")
-
             self.browser = await playwright.chromium.launch(**launch_options)
-
             context_params = {
                 "viewport": {"width": window_width, "height": window_height},
                 "user_agent": mobile_user_agent,
@@ -72,28 +64,21 @@ class BrowserManager:
                 "has_touch": True,
                 "ignore_https_errors": True,
             }
-
             self.context = await self.browser.new_context(**context_params)
             self.page = await self.context.new_page()
             await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
-
             script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
             page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
-
             self.page.set_default_timeout(page_load_timeout * 1000)
             self.page.set_default_navigation_timeout(script_timeout * 1000)
-
             logger.info(f"{self.account_name} | Browser created successfully")
-            
             await self.page.evaluate("""
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
             """)
-
             await self.page.goto(self.auth_url, timeout=60000, wait_until="networkidle")
             return self.page
-
         except Exception as e:
             logger.error(f"{self.account_name} | Error launching browser: {e}")
             if hasattr(self, 'browser') and self.browser:
@@ -107,13 +92,11 @@ class BrowserManager:
                     await self.page.close()
                 except Exception as e:
                     logger.debug(f"{self.account_name} | Error closing page: {e}")
-            
             if self.context:
                 try:
                     await self.context.close()
                 except Exception as e:
                     logger.debug(f"{self.account_name} | Error closing context: {e}")
-            
             if self.browser:
                 try:
                     await self.browser.close()
@@ -125,15 +108,10 @@ class BrowserManager:
     async def upgrade_city(self):
         try:
             logger.info(f"{self.account_name} | Starting city upgrade")
-            
-            # Ждем загрузки основных элементов
             await self.page.wait_for_selector('[class^="_buildNav"]', timeout=10000)
-            
             upgrade_result = await self.page.evaluate(f"""
             async () => {{
                 const sleep = ms => new Promise(r => setTimeout(r, ms));
-                
-                // Вспомогательная функция для безопасного клика
                 const safeClick = async (element) => {{
                     if (!element) return false;
                     try {{
@@ -144,48 +122,37 @@ class BrowserManager:
                         return false;
                     }}
                 }};
-                
                 let missingButtons = [];
                 let upgradedCount = 0;
                 let noUpgradesAvailable = true;
-                
                 const startTime = Date.now();
                 const maxExecutionTime = {config.SCRIPT_UPGRADE['max_execution_time']};
                 const noChangeTimeout = {config.SCRIPT_UPGRADE['no_change_timeout']};
                 let lastChangeTime = startTime;
-
-                // Находим и проверяем вкладки
                 const navElement = document.querySelector('[class^="_buildNav"]');
                 if (!navElement) {{
                     console.log("Navigation element not found");
                     return {{ error: "Navigation not found" }};
                 }}
-                
                 let tabs = Array.from(navElement.querySelectorAll('[class^="_navItem"]'))
                     .filter(item => item.querySelector('[class^="_count"]'));
-                
                 if (!tabs.length) {{
                     console.log("No tabs found");
                     return {{ error: "No tabs found" }};
                 }}
-                
                 const reorderedTabs = [
                     ...tabs.slice(1, 4),
                     tabs[0],
                     ...tabs.slice(4)
                 ];
-
                 for (let t of reorderedTabs) {{
-                    if (!t) continue;  // Пропускаем undefined элементы
-                    
+                    if (!t) continue;
                     if (Date.now() - startTime > maxExecutionTime) {{
                         console.log("Maximum execution time exceeded");
                         break;
                     }}
-
                     let clickAttempts = 0;
                     const maxClickAttempts = 3;
-                    
                     while (clickAttempts < maxClickAttempts) {{
                         if (!await safeClick(t)) {{
                             console.log("Tab click failed");
@@ -193,43 +160,33 @@ class BrowserManager:
                             await sleep(200);
                             continue;
                         }}
-                        
                         await sleep(500);
-                        
                         if (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true') {{
                             break;
                         }}
-                        
                         clickAttempts++;
                         await sleep(200);
                     }}
-
                     await sleep({config.SCRIPT_UPGRADE['click_delay']});
-
                     let items = Array.from(document.querySelectorAll('[class^="_buildPreview"]'))
                         .filter(item => item && 
                                       !item.classList.contains('disabled') && 
                                       !item.querySelector('[class^="_cooldown"]') &&
                                       !item.querySelector('button[disabled]'));
-
                     if (items.length > 0) {{
                         noUpgradesAvailable = false;
                     }}
-
                     for (let item of items) {{
-                        if (!item) continue;  // Пропускаем undefined элементы
-                        
+                        if (!item) continue;
                         if (Date.now() - startTime > maxExecutionTime) {{
                             break;
                         }}
-
                         let button = item.querySelector('button');
                         if (button) {{
                             if (await safeClick(button)) {{
                                 upgradedCount++;
                                 lastChangeTime = Date.now();
                                 await sleep({config.SCRIPT_UPGRADE['post_click_delay']});
-
                                 let detailButton = document.querySelector('[class^="_buildDetail"] button');
                                 if (detailButton) {{
                                     await safeClick(detailButton);
@@ -240,10 +197,8 @@ class BrowserManager:
                             missingButtons.push(item.outerHTML);
                         }}
                     }}
-
                     await sleep({config.SCRIPT_UPGRADE['final_delay']});
                 }}
-
                 return {{
                     message: noUpgradesAvailable ? "No upgrades available" : "Upgrade completed",
                     missingButtons: missingButtons,
@@ -252,16 +207,13 @@ class BrowserManager:
                 }};
             }}
             """)
-
             if 'error' in upgrade_result:
                 logger.error(f"{self.account_name} | Upgrade error: {upgrade_result['error']}")
                 return False
-
             logger.info(f"{self.account_name} | Upgrades completed: {upgrade_result['upgradedCount']}")
             if upgrade_result['missingButtons']:
                 logger.debug(f"{self.account_name} | Missing buttons: {upgrade_result['missingButtons']}")
             return not upgrade_result['noUpgradesAvailable']
-
         except Exception as e:
             logger.error(f"{self.account_name} | Error upgrading city: {e}")
             logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
@@ -281,7 +233,6 @@ class BrowserManager:
                     pass
             else:
                 logger.info(f"{self.account_name} | Build button not found")
-
         except Exception as e:
             logger.info(f"{self.account_name} | Error finding or clicking build button: {e}")
 
@@ -289,7 +240,6 @@ class BrowserManager:
         try:
             await self.page.wait_for_selector('body', timeout=60000)
             await asyncio.sleep(random.uniform(*config.PAGE_LOAD_DELAY))
-
             try:
                 excellent_button = await self.page.wait_for_selector(
                     "button._button_1ir11_1._primary_1ir11_25._normal_1ir11_211:text('Отлично!')", 
@@ -318,23 +268,19 @@ class BrowserManager:
                     await asyncio.sleep(2)
             except Exception as e:
                 logger.debug(f"{self.account_name} | No excellent button found: {e}")
-
             city_selectors = [
                 "a._button_1rcrc_1._big_1rcrc_52[href='/city']",
                 "div._title_1rcrc_32:text('Ваш город')",
                 "//a[contains(@class, '_button_') and @href='/city']",
                 "//div[contains(@class, '_title_') and text()='Ваш город']"
             ]
-
             for selector in city_selectors:
                 try:
                     city_button = await self.page.wait_for_selector(selector, state="visible", timeout=10000)
                     if city_button:
                         logger.info(f"{self.account_name} | Found city button")
-                        
                         await city_button.scroll_into_view_if_needed()
                         await asyncio.sleep(1)
-                        
                         await self.page.evaluate("""(element) => {
                             element.click();
                             element.dispatchEvent(new MouseEvent('click', {
@@ -343,12 +289,9 @@ class BrowserManager:
                                 view: window
                             }));
                         }""", city_button)
-                        
                         await asyncio.sleep(random.uniform(*config.CITY_BUTTON_CLICK_DELAY))
-                        
                         if '/city' in self.page.url:
                             logger.info(f"{self.account_name} | Successfully navigated to city page")
-                            
                             build_button = await self.page.wait_for_selector("div._btnBuild_xw841_23", timeout=5000)
                             if build_button:
                                 await build_button.click()
@@ -357,14 +300,11 @@ class BrowserManager:
                 except Exception as e:
                     logger.debug(f"{self.account_name} | Failed with selector {selector}: {e}")
                     continue
-
             upgrades_available = await self.upgrade_city()
             if not upgrades_available:
                 logger.info(f"{self.account_name} | No upgrades available")
                 return True
-
             return True
-
         except asyncio.CancelledError:
             logger.warning(f"{self.account_name} | Navigation cancelled")
             return False
@@ -385,28 +325,23 @@ class BrowserManager:
             energy_text = await energy_element.text_content()
             current_energy = int(energy_text.split('/')[0].strip().replace(',', ''))
             taps_remaining = current_energy
-
             coin_selector = "div[class*='_coin_']"
             coin_element = await self.page.wait_for_selector(coin_selector, timeout=10000)
-
             if coin_element and taps_remaining > 0:
                 box = await coin_element.bounding_box()
                 if box:
                     base_x = box['x'] + box['width'] / 2
                     base_y = box['y'] + box['height'] / 2
-
                     with gradient_progress_bar(range(current_energy), desc=f"{self.account_name} | Taps on coins", total=current_energy) as pbar:
                         while taps_remaining > 0: 
                             num_fingers = min(random.randint(1, 5), taps_remaining) 
                             touch_points = []
-                            
                             for i in range(num_fingers):
                                 angle = random.uniform(0, 2 * 3.14159)
                                 radius = random.uniform(10, 50)
                                 x = base_x + radius * math.cos(angle)
                                 y = base_y + radius * math.sin(angle)
                                 touch_points.append({"x": x, "y": y})
-
                             await self.page.evaluate("""
                                 (points) => {
                                     const touches = points.map((p, i) => new Touch({
@@ -419,7 +354,6 @@ class BrowserManager:
                                         rotationAngle: 10,
                                         force: 1
                                     }));
-
                                     const touchStartEvent = new TouchEvent('touchstart', {
                                         cancelable: true,
                                         bubbles: true,
@@ -427,7 +361,6 @@ class BrowserManager:
                                         targetTouches: touches,
                                         changedTouches: touches
                                     });
-
                                     const touchEndEvent = new TouchEvent('touchend', {
                                         cancelable: true,
                                         bubbles: true,
@@ -435,16 +368,13 @@ class BrowserManager:
                                         targetTouches: [],
                                         changedTouches: touches
                                     });
-
                                     document.elementFromPoint(points[0].x, points[0].y).dispatchEvent(touchStartEvent);
                                     document.elementFromPoint(points[0].x, points[0].y).dispatchEvent(touchEndEvent);
                                 }
                             """, touch_points)
-                            
                             taps_remaining -= num_fingers  
                             pbar.update(num_fingers)
                             await asyncio.sleep(random.uniform(0.01, 0.05))
-
             return current_energy
         except Exception as e:
             logger.error(f"{self.account_name} | Error checking energy and tapping coins: {e}")
@@ -457,9 +387,7 @@ class BrowserManager:
                     if (!text) return null;
                     return text.replace(/[^0-9]/g, '');
                 };
-
                 const stats = {};
-                
                 const levelElement = document.querySelector('div[class*="_title_14n1y_"]');
                 if (levelElement) {
                     const levelText = levelElement.textContent;
@@ -468,34 +396,28 @@ class BrowserManager:
                         stats.level = `${levelMatch[1]}/${levelMatch[2]}`;
                     }
                 }
-                
                 const incomeElement = document.querySelector('#income ._info_ji1yj_18');
                 if (incomeElement) {
                     const incomeText = incomeElement.textContent;
                     stats.income = formatNumber(incomeText);
                 }
-                
                 const populationElement = document.querySelector('#population ._info_ji1yj_18');
                 if (populationElement) {
                     const populationText = populationElement.textContent;
                     stats.population = formatNumber(populationText);
                 }
-                
                 const balanceElement = document.querySelector('div[class*="_money_"]');
                 if (balanceElement) {
                     const balanceText = balanceElement.textContent;
                     stats.balance = formatNumber(balanceText);
                 }
-                
                 return stats;
             }""")
-            
             if stats:
                 def format_number(num_str):
                     if num_str and num_str.isdigit():
                         return "{:,}".format(int(num_str)).replace(',', ' ')
                     return 'N/A'
-                
                 print("")
                 logger.info(f"{self.account_name} | Game stats:")
                 logger.info("\t├── Level: " + stats.get('level', 'N/A'))
@@ -503,7 +425,6 @@ class BrowserManager:
                 logger.info("\t├── Population: " + format_number(stats.get('population')))
                 logger.info("\t└─ Balance: " + format_number(stats.get('balance')))
                 print("")
-
             return stats
         except Exception as e:
             logger.error(f"{self.account_name} | Error getting game stats: {e}")
@@ -513,18 +434,31 @@ class BrowserManager:
         max_retries = config.MAX_RETRIES
         retry_delay = config.RETRY_DELAY
         thread_timeout = random.randint(*config.BROWSER_THREAD_TIMEOUT)
-
         logger.info(f"{self.account_name} | Thread timeout set: {thread_timeout} seconds")
-
         for attempt in range(max_retries):
             try:
                 await self.create_browser()
                 await self.page.goto(self.auth_url)
-                initial_url = self.page.url
+                try:
+                    logger.info(f"{self.account_name} | Waiting for page load...")
+                    await self.page.wait_for_selector(
+                        "div[class*='_closeButton_'], " + 
+                        "button:has-text('Отлично!'), " + 
+                        "button:has-text('Забрать'), " + 
+                        "button:has-text('Пропустить'), " + 
+                        "button[class*='_dice_'], " + 
+                        "button:has-text('Создать город'), " + 
+                        "button:has-text('Начнем!')",
+                        timeout=10000
+                    )
+                    logger.info(f"{self.account_name} | Page loaded, starting button checks")
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    logger.error(f"{self.account_name} | Page load timeout: {e}")
+                    continue
                 check_interval = config.NAVIGATION["check_interval"]
                 max_wait_time = config.NAVIGATION["max_wait_time"]
                 start_time = time.time()
-
                 buttons_to_check = [
                     ("Close button", config.SELECTORS["close_button"]),
                     ("Excellent button", config.SELECTORS["excellent_button"]),
@@ -534,56 +468,48 @@ class BrowserManager:
                     ("Create city button", config.SELECTORS["create_city_button"]),
                     ("Let's start button", config.SELECTORS["lets_start_button"]),
                 ]
-
                 while time.time() - start_time < max_wait_time:
                     try:
                         if not self.page.is_closed():
-                            current_url = self.page.url
-                            if current_url != initial_url:
-                                for button_name, selector in buttons_to_check:
-                                    try:
-                                        button = await self.page.wait_for_selector(selector, timeout=1000)
-                                        if button:
-                                            await button.click()
-                                            await asyncio.sleep(random.uniform(*config.RANDOM_DELAY))
-                                    except Exception:
-                                        continue
-
-                                energy_amount = await self.check_energy_and_tap_coins()
-                                if energy_amount > 0:
-                                    break
+                            for button_name, selector in buttons_to_check:
+                                try:
+                                    button = await self.page.wait_for_selector(selector, timeout=2000)
+                                    if button:
+                                        logger.info(f"{self.account_name} | Found and clicking {button_name}")
+                                        await button.click()
+                                        await asyncio.sleep(random.uniform(1, 2))
+                                except Exception:
+                                    continue
+                            energy_amount = await self.check_energy_and_tap_coins()
+                            if energy_amount > 0:
+                                logger.info(f"{self.account_name} | Energy found: {energy_amount}")
+                                break
                         else:
                             logger.warning(f"{self.account_name} | Page closed")
                             break
-
                         await asyncio.sleep(check_interval)
                     except Exception as e:
-                        logger.error(f"{self.account_name} | Error working with browser: {e}")
+                        logger.error(f"{self.account_name} | Error during button checks: {e}")
                         break
-
                 if not self.page.is_closed():
                     try:
                         await self.get_game_stats()
                     except Exception as e:
                         logger.error(f"{self.account_name} | Error getting game stats: {e}")
-
                     await asyncio.sleep(5)
                     navigation_completed = await self.navigate_city()
-
                     if navigation_completed:
                         logger.info(f"{self.account_name} | Session ended successfully")
                         return True
                     else:
                         logger.error(f"{self.account_name} | Error navigating city")
                         return False
-
             except asyncio.CancelledError:
                 logger.warning(f"{self.account_name} | Operation was cancelled")
                 return False
             except Exception as e:
                 logger.error(f"{self.account_name} | Error in BrowserManager.run: {e}")
                 logger.error(f"{self.account_name} | Traceback: {traceback.format_exc()}")
-
                 if attempt < max_retries - 1:
                     logger.info(f"{self.account_name} | Retrying in {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
@@ -595,7 +521,6 @@ class BrowserManager:
                     await self.close_browser()
                 except Exception as e:
                     logger.error(f"{self.account_name} | Error closing browser in finally block: {e}")
-
         return False
 
     async def test_proxy_connection(self):
@@ -603,7 +528,6 @@ class BrowserManager:
             proxy_obj = Proxy.from_str(self.proxy)
             conn = aiohttp.TCPConnector(ssl=False)
             timeout = aiohttp.ClientTimeout(total=30)
-            
             async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
                 try:
                     proxy_url = f"socks5://{proxy_obj.login}:{proxy_obj.password}@{proxy_obj.host}:{proxy_obj.port}"
@@ -628,8 +552,6 @@ class BrowserManager:
 async def play_in_browser(account_name: str, auth_url: str, proxy: Optional[str] = None) -> bool:
     browser_manager = BrowserManager(account_name, auth_url, proxy)
     result = await browser_manager.run()
-
     if not result:
         logger.error(f"{account_name} | Error while working with browser")
-
     return result
