@@ -33,88 +33,63 @@ def setup_browser():
         import subprocess
 
         if platform.system() == 'Linux':
-            logger.info("Linux detected, installing dependencies...")
+            logger.info("Linux detected, checking dependencies...")
             try:
-                subprocess.run([
-                    'sudo', 'apt-get', 'update'
-                ], check=True)
-                
-                subprocess.run([
-                    'sudo', 'apt-get', 'install', '-y',
-                    'libatk1.0-0',
-                    'libatk-bridge2.0-0',
-                    'libcups2',
-                    'libdbus-1-3',
-                    'libdrm2',
-                    'libgbm1',
-                    'libasound2',
-                    'libatspi2.0-0',
-                    'libxcomposite1',
-                    'libxdamage1',
-                    'libxfixes3',
-                    'libxrandr2',
-                    'libgbm1',
-                    'libpango-1.0-0',
-                    'libcairo2',
-                    'libnss3',
-                    'libnspr4',
-                    'libxss1',
-                    'libasound2',
-                    'fonts-liberation',
-                    'libappindicator3-1',
-                    'libasound2',
-                    'libatk1.0-0',
-                    'libc6',
-                    'libcairo2',
-                    'libcups2',
-                    'libdbus-1-3',
-                    'libexpat1',
-                    'libfontconfig1',
-                    'libgcc1',
-                    'libgconf-2-4',
-                    'libgdk-pixbuf2.0-0',
-                    'libglib2.0-0',
-                    'libgtk-3-0',
-                    'libnspr4',
-                    'libnss3',
-                    'libpango-1.0-0',
-                    'libpangocairo-1.0-0',
-                    'libstdc++6',
-                    'libx11-6',
-                    'libx11-xcb1',
-                    'libxcb1',
-                    'libxcomposite1',
-                    'libxcursor1',
-                    'libxdamage1',
-                    'libxext6',
-                    'libxfixes3',
-                    'libxi6',
-                    'libxrandr2',
-                    'libxrender1',
-                    'libxss1',
-                    'libxtst6',
-                    'ca-certificates',
-                    'fonts-liberation',
-                    'libappindicator1',
-                    'libnss3',
-                    'lsb-release',
-                    'xdg-utils',
-                    'wget'
-                ], check=True)
+                # Сначала проверяем, можем ли мы использовать sudo
+                try:
+                    subprocess.run(['sudo', '-n', 'true'], check=True, capture_output=True)
+                    use_sudo = True
+                except:
+                    use_sudo = False
+                    logger.info("No sudo access, trying without sudo...")
 
-                logger.info("System dependencies installed successfully")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install system dependencies: {e}")
-                logger.info("Please install the required packages manually")
-                return
+                # Список необходимых пакетов
+                required_packages = [
+                    'libatk1.0-0', 'libatk-bridge2.0-0', 'libcups2', 'libdbus-1-3',
+                    'libdrm2', 'libgbm1', 'libasound2', 'libatspi2.0-0', 'libxcomposite1',
+                    'libxdamage1', 'libxfixes3', 'libxrandr2', 'libpango-1.0-0', 'libcairo2',
+                    'libnss3', 'libnspr4', 'libxss1', 'fonts-liberation', 'libappindicator3-1',
+                    'libgconf-2-4', 'libgtk-3-0'
+                ]
 
-            try:
-                logger.info("Installing Playwright browsers...")
-                subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'], check=True)
-                subprocess.run([sys.executable, '-m', 'playwright', 'install-deps'], check=True)
-                logger.info("Playwright browsers installed successfully")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install Playwright browsers: {e}")
+                # Пытаемся установить через playwright
+                logger.info("Installing browser dependencies through playwright...")
+                try:
+                    subprocess.run([sys.executable, '-m', 'playwright', 'install-deps'], 
+                                 check=True, capture_output=True)
+                    logger.info("Playwright dependencies installed successfully")
+                except subprocess.CalledProcessError:
+                    logger.warning("Failed to install through playwright, continuing...")
+
+                # Пытаемся установить через apt если есть sudo
+                if use_sudo:
+                    try:
+                        # Проверяем, не запущен ли другой процесс apt
+                        subprocess.run(['sudo', 'lsof', '/var/lib/dpkg/lock-frontend'], 
+                                    check=True, capture_output=True)
+                        logger.warning("Another package manager process is running, skipping apt installation")
+                    except subprocess.CalledProcessError:
+                        # Если процесс не запущен, пытаемся установить
+                        try:
+                            subprocess.run(['sudo', 'apt-get', 'update', '-y'], 
+                                         check=True, capture_output=True)
+                            subprocess.run(['sudo', 'apt-get', 'install', '-y'] + required_packages, 
+                                         check=True, capture_output=True)
+                            logger.info("System dependencies installed successfully")
+                        except subprocess.CalledProcessError as e:
+                            logger.warning(f"Failed to install through apt: {e}")
+
+                # Устанавливаем браузер
+                logger.info("Installing Chromium browser...")
+                subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'], 
+                             check=True, capture_output=True)
+                logger.info("Chromium browser installed successfully")
+
+            except Exception as e:
+                logger.error(f"Error during dependency installation: {e}")
+                logger.info("You may need to install dependencies manually:")
+                logger.info("1. Run: python -m playwright install-deps")
+                logger.info("2. Run: python -m playwright install chromium")
                 return
 
         if platform.system() == 'Windows':
