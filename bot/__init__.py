@@ -32,6 +32,91 @@ def setup_browser():
     try:
         import subprocess
 
+        if platform.system() == 'Linux':
+            logger.info("Linux detected, installing dependencies...")
+            try:
+                subprocess.run([
+                    'sudo', 'apt-get', 'update'
+                ], check=True)
+                
+                subprocess.run([
+                    'sudo', 'apt-get', 'install', '-y',
+                    'libatk1.0-0',
+                    'libatk-bridge2.0-0',
+                    'libcups2',
+                    'libdbus-1-3',
+                    'libdrm2',
+                    'libgbm1',
+                    'libasound2',
+                    'libatspi2.0-0',
+                    'libxcomposite1',
+                    'libxdamage1',
+                    'libxfixes3',
+                    'libxrandr2',
+                    'libgbm1',
+                    'libpango-1.0-0',
+                    'libcairo2',
+                    'libnss3',
+                    'libnspr4',
+                    'libxss1',
+                    'libasound2',
+                    'fonts-liberation',
+                    'libappindicator3-1',
+                    'libasound2',
+                    'libatk1.0-0',
+                    'libc6',
+                    'libcairo2',
+                    'libcups2',
+                    'libdbus-1-3',
+                    'libexpat1',
+                    'libfontconfig1',
+                    'libgcc1',
+                    'libgconf-2-4',
+                    'libgdk-pixbuf2.0-0',
+                    'libglib2.0-0',
+                    'libgtk-3-0',
+                    'libnspr4',
+                    'libnss3',
+                    'libpango-1.0-0',
+                    'libpangocairo-1.0-0',
+                    'libstdc++6',
+                    'libx11-6',
+                    'libx11-xcb1',
+                    'libxcb1',
+                    'libxcomposite1',
+                    'libxcursor1',
+                    'libxdamage1',
+                    'libxext6',
+                    'libxfixes3',
+                    'libxi6',
+                    'libxrandr2',
+                    'libxrender1',
+                    'libxss1',
+                    'libxtst6',
+                    'ca-certificates',
+                    'fonts-liberation',
+                    'libappindicator1',
+                    'libnss3',
+                    'lsb-release',
+                    'xdg-utils',
+                    'wget'
+                ], check=True)
+
+                logger.info("System dependencies installed successfully")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to install system dependencies: {e}")
+                logger.info("Please install the required packages manually")
+                return
+
+            try:
+                logger.info("Installing Playwright browsers...")
+                subprocess.run([sys.executable, '-m', 'playwright', 'install', 'chromium'], check=True)
+                subprocess.run([sys.executable, '-m', 'playwright', 'install-deps'], check=True)
+                logger.info("Playwright browsers installed successfully")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to install Playwright browsers: {e}")
+                return
+
         if platform.system() == 'Windows':
             logger.info("Windows detected, checking installation...")
             
