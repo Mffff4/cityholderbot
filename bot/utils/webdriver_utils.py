@@ -53,6 +53,10 @@ class BrowserManager:
                 "--disable-background-media-suspend",
                 "--js-flags=--expose-gc",
                 "--memory-pressure-off",
+                "--disable-web-security",
+                "--ignore-certificate-errors",
+                "--ignore-certificate-errors-spki-list",
+                "--ignore-ssl-errors",
             ]
             if config.BROWSER_CONFIG["headless"]:
                 browser_args.append("--headless=new")
@@ -77,7 +81,6 @@ class BrowserManager:
                     ])
                 except Exception as e:
                     logger.warning(f"{self.account_name} | Skipping proxy configuration: {e}")
-            self.browser = await playwright.chromium.launch(**launch_options)
             context_params = {
                 "viewport": {"width": window_width, "height": window_height},
                 "user_agent": mobile_user_agent,
@@ -85,27 +88,88 @@ class BrowserManager:
                 "is_mobile": True,
                 "has_touch": True,
                 "ignore_https_errors": True,
+                "bypass_csp": True,
+                "locale": "ru-RU"
             }
-            self.context = await self.browser.new_context(**context_params)
-            self.page = await self.context.new_page()
-            await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
-            script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
-            page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
-            self.page.set_default_timeout(page_load_timeout * 1000)
-            self.page.set_default_navigation_timeout(script_timeout * 1000)
-            logger.info(f"{self.account_name} | Browser created successfully")
-            await self.page.evaluate("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """)
-            await self.page.goto(self.auth_url, timeout=60000, wait_until="networkidle")
-            return self.page
+            max_retries = 3
+            retry_delay = 5
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    self.browser = await playwright.chromium.launch(**launch_options)
+                    self.context = await self.browser.new_context(**context_params)
+                    self.page = await self.context.new_page()
+                    
+                    await self.page.set_extra_http_headers(config.BROWSER_CONFIG["network_headers"])
+                    script_timeout = random.randint(*config.SCRIPT_TIMEOUT)
+                    page_load_timeout = random.randint(*config.BROWSER_CREATION_TIMEOUT)
+                    self.page.set_default_timeout(page_load_timeout * 1000)
+                    self.page.set_default_navigation_timeout(script_timeout * 1000)
+                    
+                    await self.page.evaluate("""
+                        Object.defineProperty(navigator, 'webdriver', {
+                            get: () => undefined
+                        });
+                        Object.defineProperty(navigator, 'plugins', {
+                            get: () => [1, 2, 3, 4, 5]
+                        });
+                    """)
+                    
+                    try:
+                        logger.info(f"{self.account_name} | Attempting to navigate to page (attempt {attempt + 1}/{max_retries})")
+                        response = await self.page.goto(
+                            self.auth_url,
+                            timeout=60000,
+                            wait_until="domcontentloaded"
+                        )
+                        
+                        if response and response.ok:
+                            logger.info(f"{self.account_name} | Navigation successful")
+                            logger.info(f"{self.account_name} | Browser created successfully")
+                            return self.page
+                        else:
+                            status = response.status if response else 'Unknown'
+                            raise Exception(f"Navigation failed with status: {status}")
+                            
+                    except Exception as nav_error:
+                        last_error = nav_error
+                        logger.warning(f"{self.account_name} | Navigation attempt {attempt + 1} failed: {nav_error}")
+                        
+                        if attempt < max_retries - 1:
+                            logger.info(f"{self.account_name} | Cleaning up and retrying in {retry_delay} seconds...")
+                            await self._cleanup_browser_instance()
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            raise Exception(f"Navigation failed after {max_retries} attempts. Last error: {nav_error}")
+                            
+                except Exception as e:
+                    last_error = e
+                    logger.error(f"{self.account_name} | Browser creation attempt {attempt + 1} failed: {str(e)}")
+                    await self._cleanup_browser_instance()
+                    
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                    else:
+                        raise Exception(f"Browser creation failed after {max_retries} attempts. Last error: {last_error}")
+                        
         except Exception as e:
-            logger.error(f"{self.account_name} | Error launching browser: {e}")
+            logger.error(f"{self.account_name} | Fatal error creating browser: {str(e)}")
+            await self._cleanup_browser_instance()
+            raise
+
+    async def _cleanup_browser_instance(self):
+        """Вспомогательный метод для очистки ресурсов браузера"""
+        try:
+            if hasattr(self, 'page') and self.page:
+                await self.page.close()
+            if hasattr(self, 'context') and self.context:
+                await self.context.close()
             if hasattr(self, 'browser') and self.browser:
                 await self.browser.close()
-            raise
+        except Exception as e:
+            logger.error(f"{self.account_name} | Error during cleanup: {e}")
 
     async def close_browser(self):
         try:
