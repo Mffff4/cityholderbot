@@ -118,20 +118,50 @@ class BrowserManager:
                     
                     try:
                         logger.info(f"{self.account_name} | Attempting to navigate to page (attempt {attempt + 1}/{max_retries})")
-                        response = await self.page.goto(
-                            self.auth_url,
-                            timeout=60000,
-                            wait_until="domcontentloaded"
-                        )
                         
-                        if response and response.ok:
-                            logger.info(f"{self.account_name} | Navigation successful")
-                            logger.info(f"{self.account_name} | Browser created successfully")
-                            return self.page
-                        else:
-                            status = response.status if response else 'Unknown'
-                            raise Exception(f"Navigation failed with status: {status}")
-                            
+                        for nav_attempt in range(3):  # 3 попытки для навигации
+                            try:
+                                response = await self.page.goto(
+                                    self.auth_url,
+                                    timeout=60000,
+                                    wait_until="domcontentloaded",  # Используем более быстрый вариант
+                                    referer="https://web.telegram.org/"  # Добавляем реферер
+                                )
+                                
+                                if response and response.ok:
+                                    logger.info(f"{self.account_name} | Navigation successful")
+                                    logger.info(f"{self.account_name} | Browser created successfully")
+                                    return self.page
+                                else:
+                                    status = response.status if response else 'Unknown'
+                                    logger.warning(f"{self.account_name} | Navigation returned status: {status}")
+                                    
+                                    if "ERR_CONNECTION_CLOSED" in str(status):
+                                        if nav_attempt < 2:  # Если это не последняя попытка
+                                            logger.info(f"{self.account_name} | Connection closed, retrying in 5 seconds...")
+                                            await asyncio.sleep(5)
+                                            continue
+                                        raise Exception(f"Navigation failed with status: {status}")
+                                        
+                            except playwright._impl._errors.Error as e:
+                                if "ERR_CONNECTION_CLOSED" in str(e):
+                                    if nav_attempt < 2:  # Если это не последняя попытка
+                                        logger.info(f"{self.account_name} | Connection closed, retrying in 5 seconds...")
+                                        await asyncio.sleep(5)
+                                        continue
+                                    raise  # Пробрасываем другие ошибки playwright
+                                    
+                                raise  # Пробрасываем другие ошибки playwright
+                                
+                            except Exception as e:
+                                if nav_attempt < 2:
+                                    logger.warning(f"{self.account_name} | Navigation attempt {nav_attempt + 1} failed: {e}")
+                                    await asyncio.sleep(5)
+                                    continue
+                                raise
+                                
+                        raise Exception("All navigation attempts failed")
+                        
                     except Exception as nav_error:
                         last_error = nav_error
                         logger.warning(f"{self.account_name} | Navigation attempt {attempt + 1} failed: {nav_error}")
