@@ -124,8 +124,8 @@ class BrowserManager:
                                 response = await self.page.goto(
                                     self.auth_url,
                                     timeout=60000,
-                                    wait_until="domcontentloaded",  # Используем более быстрый вариант
-                                    referer="https://web.telegram.org/"  # Добавляем реферер
+                                    wait_until="domcontentloaded",
+                                    referer="https://web.telegram.org/"
                                 )
                                 
                                 if response and response.ok:
@@ -136,24 +136,20 @@ class BrowserManager:
                                     status = response.status if response else 'Unknown'
                                     logger.warning(f"{self.account_name} | Navigation returned status: {status}")
                                     
-                                    if "ERR_CONNECTION_CLOSED" in str(status):
-                                        if nav_attempt < 2:  # Если это не последняя попытка
-                                            logger.info(f"{self.account_name} | Connection closed, retrying in 5 seconds...")
-                                            await asyncio.sleep(5)
-                                            continue
-                                        raise Exception(f"Navigation failed with status: {status}")
-                                        
-                            except playwright._impl._errors.Error as e:
-                                if "ERR_CONNECTION_CLOSED" in str(e):
                                     if nav_attempt < 2:  # Если это не последняя попытка
+                                        logger.info(f"{self.account_name} | Retrying navigation in 5 seconds...")
+                                        await asyncio.sleep(5)
+                                        continue
+                                    raise Exception(f"Navigation failed with status: {status}")
+                                    
+                            except Exception as e:
+                                error_message = str(e)
+                                if "ERR_CONNECTION_CLOSED" in error_message:
+                                    if nav_attempt < 2:
                                         logger.info(f"{self.account_name} | Connection closed, retrying in 5 seconds...")
                                         await asyncio.sleep(5)
                                         continue
-                                    raise  # Пробрасываем другие ошибки playwright
-                                    
-                                raise  # Пробрасываем другие ошибки playwright
                                 
-                            except Exception as e:
                                 if nav_attempt < 2:
                                     logger.warning(f"{self.account_name} | Navigation attempt {nav_attempt + 1} failed: {e}")
                                     await asyncio.sleep(5)
